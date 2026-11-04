@@ -64,35 +64,6 @@
     tblSales: [],
     tblSupply: []
   };
-  // Fingerprints let the first version's built-in sample rows be removed during upgrade.
-  const STARTER_ROWS = {
-    products: [
-      { ProductID: 10001, ProductName: 'Industrial thermal printer', ProductType: 'Printing equipment', ProductPrice: 22945.75, ProductDescription: 'Direct thermal unit for dispatch labels.', CriticalLvl: 24 },
-      { ProductID: 10002, ProductName: 'Wireless barcode scanner', ProductType: 'Scanning equipment', ProductPrice: 6810.4, ProductDescription: 'Bluetooth scanner with charging cradle.', CriticalLvl: 18 },
-      { ProductID: 10003, ProductName: 'Heavy-duty shipping scale', ProductType: 'Weighing equipment', ProductPrice: 10580.25, ProductDescription: 'Platform scale for warehouse parcels.', CriticalLvl: 16 },
-      { ProductID: 10004, ProductName: 'RFID inventory tag roll', ProductType: 'Consumables', ProductPrice: 3604.8, ProductDescription: 'Roll of 500 adhesive RFID tags.', CriticalLvl: 40 }
-    ],
-    suppliers: [
-      { SupplierID: 20001, SupplierName: 'Metrobyte Office Systems', SupplierAddress: 'Makati City', SupplierContact: '+63 2 8796 4210' },
-      { SupplierID: 20002, SupplierName: 'Northline Warehouse Supply', SupplierAddress: 'Caloocan City', SupplierContact: '+63 2 8365 7184' }
-    ],
-    stocks: [
-      { StockID: 30001, ProductID: 10001, StockQty: 95, Remarks: 'Ready for dispatch' },
-      { StockID: 30002, ProductID: 10002, StockQty: 48, Remarks: 'Charging cradles included' },
-      { StockID: 30003, ProductID: 10003, StockQty: 14, Remarks: 'Check reorder before next batch' },
-      { StockID: 30004, ProductID: 10004, StockQty: 160, Remarks: '500 tags per roll' }
-    ],
-    sales: [
-      { TransacNo: 40001, CustomerName: 'Rafael Santos', ProductID: 10002, Qty: 3, TotalPrice: 20431.2 },
-      { TransacNo: 40002, CustomerName: 'Sofia Mercado', ProductID: 10001, Qty: 1, TotalPrice: 22945.75 },
-      { TransacNo: 40003, CustomerName: 'Mika Reyes', ProductID: 10004, Qty: 6, TotalPrice: 21628.8 }
-    ],
-    supplies: [
-      { SupplyID: 50001, ProductID: 10001, SupplierID: 20001, Qty: 20 },
-      { SupplyID: 50002, ProductID: 10004, SupplierID: 20002, Qty: 80 }
-    ]
-  };
-
   let data = copy(EMPTY_DATA);
   let toastTimer;
   let stateNotice = '';
@@ -113,7 +84,6 @@
     normalized.tblProduct.forEach(row => {
       row.ProductID = Number(row.ProductID);
       row.ProductPrice = Number(row.ProductPrice) || 0;
-      row.CriticalLvl = Number(row.CriticalLvl) || 0;
     });
     normalized.tblStock.forEach(row => { row.StockID = Number(row.StockID); row.ProductID = Number(row.ProductID); row.StockQty = Number(row.StockQty) || 0; });
     normalized.tblSales.forEach(row => {
@@ -143,7 +113,6 @@
       migrated.tblProduct.push({
         ProductID: productId,
         ProductName: name.slice(0, 50),
-        ProductType: text(product.type) || 'General merchandise',
         ProductPrice: toPhp(product.price),
         ProductDescription: ''
       });
@@ -187,58 +156,6 @@
     return migrated;
   }
 
-  function removeSeedRecords(upgrading = false) {
-    const salesCount = data.tblSales.length;
-    const supplyCount = data.tblSupply.length;
-    const isSeedProduct = product => STARTER_ROWS.products.some(seed => seed.ProductID === product.ProductID &&
-      seed.ProductName === product.ProductName && seed.ProductType === product.ProductType &&
-      seed.ProductPrice === product.ProductPrice && seed.ProductDescription === product.ProductDescription && seed.CriticalLvl === product.CriticalLvl);
-    const isSeedSupplier = supplier => STARTER_ROWS.suppliers.some(seed => seed.SupplierID === supplier.SupplierID &&
-      seed.SupplierName === supplier.SupplierName && seed.SupplierAddress === supplier.SupplierAddress && seed.SupplierContact === supplier.SupplierContact);
-    const isSeedSale = sale => STARTER_ROWS.sales.some(seed => seed.TransacNo === sale.TransacNo &&
-      seed.CustomerName === sale.CustomerName && seed.ProductID === sale.ProductID && seed.Qty === sale.Qty && seed.TotalPrice === sale.TotalPrice);
-    const isSeedSupply = supply => STARTER_ROWS.supplies.some(seed => {
-      const seedSupplierName = STARTER_ROWS.suppliers.find(item => item.SupplierID === seed.SupplierID)?.SupplierName;
-      const supplier = data.tblSupplier.find(item => item.SupplierID === seed.SupplierID);
-      return seed.SupplyID === supply.SupplyID && seed.ProductID === supply.ProductID &&
-        seed.SupplierID === supply.SupplierID && seed.Qty === supply.Qty &&
-        (!supplier || supplier.SupplierName === seedSupplierName);
-    });
-    data.tblSales = data.tblSales.filter(sale => !isSeedSale(sale));
-    data.tblSupply = data.tblSupply.filter(supply => !isSeedSupply(supply));
-    const removedTransactions = salesCount !== data.tblSales.length || supplyCount !== data.tblSupply.length;
-
-    const usedProductIds = new Set([
-      ...data.tblSales.map(sale => sale.ProductID),
-      ...data.tblSupply.map(supply => supply.ProductID)
-    ]);
-    const hasEnteredStock = product => {
-      const stock = data.tblStock.find(item => item.ProductID === product.ProductID);
-      const seed = STARTER_ROWS.stocks.find(item => item.ProductID === product.ProductID);
-      return stock && seed && (stock.StockID !== seed.StockID || stock.StockQty !== seed.StockQty || text(stock.Remarks) !== seed.Remarks);
-    };
-    const productsBefore = data.tblProduct.length;
-    const dataSeedProducts = data.tblProduct.filter(product => isSeedProduct(product) && (usedProductIds.has(product.ProductID) || hasEnteredStock(product)));
-    data.tblProduct = data.tblProduct.filter(product => !isSeedProduct(product) || usedProductIds.has(product.ProductID) || hasEnteredStock(product));
-    const suppliersBefore = data.tblSupplier.length;
-    data.tblSupplier = data.tblSupplier.filter(supplier => !isSeedSupplier(supplier) || data.tblSupply.some(supply => supply.SupplierID === supplier.SupplierID));
-    const productIds = new Set(data.tblProduct.map(product => product.ProductID));
-    const stockBefore = data.tblStock.length;
-    data.tblStock = data.tblStock.filter(stock => productIds.has(stock.ProductID));
-
-    if (upgrading || removedTransactions) {
-      data.tblProduct.filter(product => dataSeedProducts.includes(product) && usedProductIds.has(product.ProductID)).forEach(product => {
-        const stock = data.tblStock.find(item => item.ProductID === product.ProductID);
-        if (!stock || !STARTER_ROWS.stocks.some(seed => seed.StockID === stock.StockID && seed.ProductID === stock.ProductID)) return;
-        const supplied = data.tblSupply.filter(item => item.ProductID === product.ProductID).reduce((sum, item) => sum + item.Qty, 0);
-        const sold = data.tblSales.filter(item => item.ProductID === product.ProductID).reduce((sum, item) => sum + item.Qty, 0);
-        stock.StockQty = Math.max(0, supplied - sold);
-        stock.Remarks = '';
-      });
-    }
-    return removedTransactions || productsBefore !== data.tblProduct.length || suppliersBefore !== data.tblSupplier.length || stockBefore !== data.tblStock.length;
-  }
-
   function loadData() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -246,14 +163,12 @@
         const parsed = JSON.parse(stored);
         if (!validDictionary(parsed)) throw new Error('The saved data does not match the current table structure.');
         data = normalizeDictionary(parsed);
-        const removedSeeds = removeSeedRecords(parsed.schemaVersion === 1);
         normalizeProductSkus();
         if (!saveData()) {
           stateNotice = 'Saved data could not be updated. The browser’s previous records remain unchanged.';
           return;
         }
-        if (removedSeeds) stateNotice = 'Starter records were removed. Your recorded products, sales, and receipts remain saved.';
-        else if (parsed.schemaVersion === 1) stateNotice = 'Sales now store the customer name directly. Saved customer names were carried over.';
+        if (parsed.schemaVersion === 1) stateNotice = 'Sales now store the customer name directly. Saved customer names were carried over.';
         return;
       }
       for (const oldKey of OLD_KEYS) {
