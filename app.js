@@ -7,6 +7,7 @@
   const money = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
   const integer = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 });
   const dateLabel = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' });
+  const timeLabel = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
   const $ = id => document.getElementById(id);
   const copy = value => JSON.parse(JSON.stringify(value));
   const text = value => String(value ?? '').trim();
@@ -36,6 +37,7 @@
       ['TransacNo', 'Int', '5', 'Transaction number'],
       ['CustomerName', 'Varchar', '100', 'Name entered when the sale is recorded'],
       ['Date', 'Date', 'Not listed', 'Date of the transaction'],
+      ['RecordedAt', 'DateTime', 'Not listed', 'Timestamp when the sale was saved; displayed in local time'],
       ['ProductID', 'Int', '5', 'ID of the product'],
       ['Qty', 'Int', 'Not listed', 'Quantity sold'],
       ['TotalPrice', 'Double', 'Not listed', 'Total price, in PHP']
@@ -45,7 +47,8 @@
       ['ProductID', 'Int', '5', 'ID of the product'],
       ['SupplierID', 'Int', '5', 'ID of the supplier'],
       ['Qty', 'Int', 'Not listed', 'Quantity received'],
-      ['DateAdded', 'Date', 'Not listed', 'Date the supply was added']
+      ['DateAdded', 'Date', 'Not listed', 'Date the supply was added'],
+      ['RecordedAt', 'DateTime', 'Not listed', 'Timestamp when the receipt was saved; displayed in local time']
     ]
   };
 
@@ -57,7 +60,7 @@
   }
 
   const EMPTY_DATA = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     tblProduct: [],
     tblSupplier: [],
     tblStock: [],
@@ -69,7 +72,7 @@
   let stateNotice = '';
 
   function validDictionary(value) {
-    return value && [1, 2, 3, 4].includes(value.schemaVersion) && Object.keys(SCHEMA).every(table => Array.isArray(value[table]));
+    return value && [1, 2, 3, 4, 5].includes(value.schemaVersion) && Object.keys(SCHEMA).every(table => Array.isArray(value[table]));
   }
 
   function normalizeDictionary(value) {
@@ -266,6 +269,11 @@
     if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'Date unavailable';
     return dateLabel.format(new Date(`${value}T00:00:00`));
   }
+  function formatTime(value) {
+    if (!value) return 'Time not recorded';
+    const timestamp = new Date(value);
+    return Number.isNaN(timestamp.getTime()) ? 'Time unavailable' : timeLabel.format(timestamp);
+  }
   function countLabel(count, noun) { return `${integer.format(count)} ${noun}${count === 1 ? '' : 's'}`; }
 
   function renderMetrics() {
@@ -345,7 +353,7 @@
     $('salesRows').innerHTML = rows.map(sale => {
       const product = productById(sale.ProductID);
       return `<tr>
-        <td><div class="primary-cell">${escapeHtml(formatDate(sale.Date))}</div><div class="secondary-cell">#${integer.format(sale.TransacNo)}</div></td>
+        <td><div class="primary-cell">${escapeHtml(formatDate(sale.Date))}</div><div class="secondary-cell">#${integer.format(sale.TransacNo)} · ${escapeHtml(formatTime(sale.RecordedAt))}</div></td>
         <td>${escapeHtml(sale.CustomerName || 'Not provided')}</td>
         <td>${escapeHtml(product?.ProductName || 'Deleted product')}</td>
         <td class="numeric">${integer.format(sale.Qty)}</td>
@@ -362,7 +370,7 @@
     $('suppliesRows').innerHTML = rows.map(supply => {
       const product = productById(supply.ProductID);
       return `<tr>
-        <td><div class="primary-cell">${escapeHtml(formatDate(supply.DateAdded))}</div><div class="secondary-cell">#${integer.format(supply.SupplyID)}</div></td>
+        <td><div class="primary-cell">${escapeHtml(formatDate(supply.DateAdded))}</div><div class="secondary-cell">#${integer.format(supply.SupplyID)} · ${escapeHtml(formatTime(supply.RecordedAt))}</div></td>
         <td>${escapeHtml(supplierName(supply.SupplierID))}</td>
         <td>${escapeHtml(product?.ProductName || 'Deleted product')}</td>
         <td class="numeric">${integer.format(supply.Qty)}</td>
@@ -597,7 +605,7 @@
     if (!$('saleDate').value) return showError('saleError', 'Choose the sale date.');
     try {
       data.tblSales.push({
-        TransacNo: nextIntId('tblSales', 'TransacNo'), CustomerName: customerName, Date: $('saleDate').value,
+        TransacNo: nextIntId('tblSales', 'TransacNo'), CustomerName: customerName, Date: $('saleDate').value, RecordedAt: new Date().toISOString(),
         ProductID: productId, Qty: quantity, TotalPrice: Math.round(product.ProductPrice * quantity * 100) / 100
       });
     } catch (error) { return showError('saleError', error.message); }
@@ -621,7 +629,7 @@
     if (!Number.isInteger(quantity) || quantity < 1) return showError('supplyError', 'Quantity must be a whole number greater than zero.');
     if (!$('supplyDate').value) return showError('supplyError', 'Choose the date the supply was added.');
     try {
-      data.tblSupply.push({ SupplyID: nextIntId('tblSupply', 'SupplyID'), ProductID: productId, SupplierID: supplierId, Qty: quantity, DateAdded: $('supplyDate').value });
+      data.tblSupply.push({ SupplyID: nextIntId('tblSupply', 'SupplyID'), ProductID: productId, SupplierID: supplierId, Qty: quantity, DateAdded: $('supplyDate').value, RecordedAt: new Date().toISOString() });
     } catch (error) { return showError('supplyError', error.message); }
     stock.StockQty += quantity;
     $('supplyQty').value = '1';

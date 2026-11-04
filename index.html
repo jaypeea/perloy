@@ -124,8 +124,8 @@
           <div class="panel-heading panel-heading-row"><div><p class="eyebrow">TRANSACTION LEDGER</p><h3>Recent sales</h3></div><span class="record-count" id="saleCount">0 records</span></div>
           <div class="table-frame table-frame-inner">
             <table>
-              <caption class="sr-only">Sales by date, customer, product, quantity, and total price</caption>
-              <thead><tr><th scope="col">Date / no.</th><th scope="col">Customer</th><th scope="col">Product</th><th scope="col" class="numeric">Qty.</th><th scope="col" class="numeric">Total</th></tr></thead>
+              <caption class="sr-only">Sales by date and time, customer, product, quantity, and total price</caption>
+              <thead><tr><th scope="col">Date / time / no.</th><th scope="col">Customer</th><th scope="col">Product</th><th scope="col" class="numeric">Qty.</th><th scope="col" class="numeric">Total</th></tr></thead>
               <tbody id="salesRows"></tbody>
             </table>
             <div id="salesEmpty" class="empty-state" hidden><p class="empty-title">No sales recorded</p><p>Saved transactions will appear here.</p></div>
@@ -152,8 +152,8 @@
           <div class="panel-heading panel-heading-row"><div><p class="eyebrow">DELIVERY LEDGER</p><h3>Recent receipts</h3></div><span class="record-count" id="supplyCount">0 records</span></div>
           <div class="table-frame table-frame-inner">
             <table>
-              <caption class="sr-only">Supply records by date, supplier, product, and quantity</caption>
-              <thead><tr><th scope="col">Date / no.</th><th scope="col">Supplier</th><th scope="col">Product</th><th scope="col" class="numeric">Qty.</th></tr></thead>
+              <caption class="sr-only">Supply records by date and time, supplier, product, and quantity</caption>
+              <thead><tr><th scope="col">Date / time / no.</th><th scope="col">Supplier</th><th scope="col">Product</th><th scope="col" class="numeric">Qty.</th></tr></thead>
               <tbody id="suppliesRows"></tbody>
             </table>
             <div id="suppliesEmpty" class="empty-state" hidden><p class="empty-title">No receipts recorded</p><p>Saved supply deliveries will appear here.</p></div>
@@ -211,7 +211,7 @@
   <dialog id="schemaDialog" class="dialog dialog-wide" aria-labelledby="schemaTitle">
     <div class="dialog-heading"><div><p class="eyebrow">RECORD STRUCTURE</p><h2 id="schemaTitle">Data dictionary</h2><p class="dialog-copy">Five tables based on section 5.2.3.</p></div><button class="icon-button" type="button" data-close-dialog aria-label="Close data dictionary">×</button></div>
     <div id="schemaContent" class="schema-content"></div>
-    <div class="schema-note"><strong>Field handling:</strong> Product SKUs use the <code translate="no">SKU-</code> prefix and a unique number you enter. The internal product ID remains fixed to preserve sales and stock links. Customer names are saved on each sale. Supplier contact numbers are stored as text so leading zeroes are preserved.</div>
+    <div class="schema-note"><strong>Field handling:</strong> Product SKUs use the <code translate="no">SKU-</code> prefix and a unique number you enter. The internal product ID remains fixed to preserve sales and stock links. Sales and supply receipts save their exact recorded time. Customer names are saved on each sale. Supplier contact numbers are stored as text so leading zeroes are preserved.</div>
     <div class="dialog-actions"><button class="button button-primary" type="button" data-close-dialog>Done</button></div>
   </dialog>
 
