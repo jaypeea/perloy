@@ -216,29 +216,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   }
 
   function setupDesktopDownloads() {
-    const releasePage = 'https://github.com/jaypeea/perloy/releases';
-    const installers = {
-      windows: import.meta.env.VITE_WINDOWS_INSTALLER_URL,
-      macos: import.meta.env.VITE_MAC_INSTALLER_URL
-    };
-
-    document.querySelectorAll('[data-platform-download]').forEach(link => {
-      const configuredUrl = String(installers[link.dataset.platformDownload] || '').trim();
-      let destination = releasePage;
-      let isDirectDownload = false;
-      try {
-        const url = new URL(configuredUrl);
-        if (url.protocol === 'https:') {
-          destination = url.href;
-          isDirectDownload = true;
-        }
-      } catch {}
-
-      link.href = destination;
-      const action = link.querySelector('[data-download-action]');
-      if (action) action.textContent = isDirectDownload ? 'Download installer' : 'View releases';
-    });
-
     const menu = $('desktopDownloads');
     document.addEventListener('click', event => {
       if (menu.open && !menu.contains(event.target)) menu.open = false;
