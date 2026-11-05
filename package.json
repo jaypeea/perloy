@@ -35,12 +35,14 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "artifactName": "Perloy-Setup.${ext}"
     },
     "mac": {
       "target": [
         "dmg"
-      ]
+      ],
+      "artifactName": "Perloy.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -54,7 +56,6 @@
     "electron-builder": "^26.18.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
-    "vite-plugin-pwa": "^2.0.0",
     "wait-on": "^9.5.1"
   },
   "dependencies": {

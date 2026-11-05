@@ -10,16 +10,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Perloy">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" href="./pwa-192x192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <title>Perloy | Inventory</title>
   <script>
-    window.__deferredPrompt = null;
+    window.__perloyDeferredPrompt = null;
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
-      window.__deferredPrompt = event;
+      window.__perloyDeferredPrompt = event;
       window.dispatchEvent(new Event('pwa-install-ready'));
     });
+    if ('serviceWorker' in navigator && window.isSecureContext) {
+      navigator.serviceWorker.register(new URL('./sw.js', window.location.href)).catch(() => {});
+    }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -236,59 +239,44 @@
 
   <dialog id="downloadDialog" class="dialog dialog-download" aria-labelledby="downloadTitle" aria-describedby="downloadDescription">
     <div class="download-modal">
-      <div class="download-modal-heading">
+      <header class="download-modal-heading">
         <div>
-          <p class="eyebrow">INSTALL PERLOY</p>
-          <h2 id="downloadTitle">Take Perloy with you</h2>
-          <p id="downloadDescription" class="dialog-copy">Install the stockroom on your phone or computer.</p>
+          <p class="eyebrow">PERLOY FOR YOUR DEVICE</p>
+          <h2 id="downloadTitle">Get Perloy</h2>
+          <p id="downloadDescription" class="dialog-copy">Install Perloy on this device or open the phone link from your camera.</p>
         </div>
         <button class="icon-button" id="closeDownload" type="button" aria-label="Close download options">×</button>
-      </div>
-
+      </header>
       <div class="download-grid">
-        <section class="download-mobile" aria-labelledby="downloadMobileTitle">
-          <div class="download-section-heading">
-            <span class="eyebrow">PHONE &amp; TABLET</span>
-            <h3 id="downloadMobileTitle">Scan to install</h3>
-          </div>
-          <div class="download-qr" id="downloadQr" role="img" aria-label="QR code for the Perloy website">
-            <span class="qr-loading" id="qrLoading">Preparing QR code…</span>
-          </div>
-          <p class="download-helper">Scan with your phone camera to open and install on Android or iOS.</p>
-          <div class="install-instructions" aria-label="Phone installation instructions">
-            <p><strong>Android</strong><span>Tap “Install App” when prompted, or choose Install app in your browser menu.</span></p>
-            <p><strong>iOS · Safari</strong><span>Tap Share, then “Add to Home Screen”.</span></p>
-          </div>
+        <section class="download-primary-panel" aria-labelledby="primaryInstallTitle">
+          <p class="eyebrow">RECOMMENDED FOR THIS DEVICE</p>
+          <h3 id="primaryInstallTitle">Download Perloy</h3>
+          <p class="download-helper" id="primaryInstallDescription">A locally stored inventory app for your device.</p>
+          <button class="button button-primary button-wide download-primary-action" id="primaryInstall" type="button">
+            <span id="primaryInstallLabel">Install Perloy</span>
+            <span aria-hidden="true">↗</span>
+          </button>
+          <p class="download-status" id="primaryInstallStatus" role="status" aria-live="polite"></p>
+          <details class="platform-list">
+            <summary>Other platforms</summary>
+            <div class="platform-choices">
+              <button type="button" data-install-platform="windows">Windows installer <span>EXE</span></button>
+              <button type="button" data-install-platform="macos">macOS installer <span>DMG</span></button>
+              <button type="button" data-install-platform="android">Android app <span>APK</span></button>
+              <button type="button" data-install-platform="ios">iPhone or iPad <span>Safari</span></button>
+            </div>
+          </details>
         </section>
-
-        <section class="download-desktop" aria-labelledby="desktopInstallTitle">
-          <div class="download-section-heading">
-            <span class="eyebrow">WINDOWS &amp; MACOS</span>
-            <h3 id="desktopInstallTitle">Install on your computer</h3>
-            <p class="download-helper">Choose your system. Your browser will offer the app install when supported.</p>
+        <section class="download-qr-panel" id="downloadQrPanel" aria-labelledby="downloadQrTitle">
+          <p class="eyebrow">PHONE &amp; TABLET</p>
+          <h3 id="downloadQrTitle">Scan to get Perloy on your phone</h3>
+          <div class="qr-frame" id="downloadQr" role="img" aria-label="QR code to open Perloy install page">
+            <span class="qr-loading">Preparing QR code…</span>
           </div>
-          <div class="desktop-options" id="desktopOptions">
-            <button class="desktop-option" id="installWindows" type="button" data-platform="windows">
-              <span class="platform-mark" aria-hidden="true">W</span>
-              <span class="desktop-option-copy"><strong>Download for Windows</strong><small>Install from your browser or download an installer</small></span>
-              <span class="platform-recommended" hidden>Recommended</span>
-              <span class="option-arrow" aria-hidden="true">↗</span>
-            </button>
-            <button class="desktop-option" id="installMac" type="button" data-platform="mac">
-              <span class="platform-mark platform-mark-mac" aria-hidden="true">M</span>
-              <span class="desktop-option-copy"><strong>Download for macOS</strong><small>Install from your browser or download an installer</small></span>
-              <span class="platform-recommended" hidden>Recommended</span>
-              <span class="option-arrow" aria-hidden="true">↗</span>
-            </button>
-          </div>
-          <p class="download-status" id="desktopInstallHelp" role="status" aria-live="polite">If an installer file is available, you can download it here.</p>
-          <div class="installer-links" id="installerLinks" hidden>
-            <a id="windowsInstallerLink" class="installer-link" hidden>Download Windows installer (.exe)</a>
-            <a id="macInstallerLink" class="installer-link" hidden>Download macOS installer (.dmg)</a>
-          </div>
-          <p class="download-note">Keep using the same web address to access records saved in this browser.</p>
+          <p class="download-helper">Scan with your phone camera to open the install page for Android or iPhone.</p>
         </section>
       </div>
+      <p class="download-footnote">Your records stay in this browser profile. Use the same Perloy address to see them again.</p>
     </div>
   </dialog>
 
@@ -299,26 +287,27 @@
         <button class="icon-button" id="closeMobileInstall" type="button" aria-label="Close install options">×</button>
       </div>
       <p class="eyebrow">PERLOY FOR MOBILE</p>
-      <h2 id="mobileInstallTitle">Install Perloy App</h2>
+      <h2 id="mobileInstallTitle">Install Perloy</h2>
       <p id="mobileInstallDescription" class="mobile-install-description">Keep your stockroom one tap away on this device.</p>
-      <button class="button button-primary button-wide mobile-install-action" id="mobileInstallAction" type="button">Install</button>
-      <section class="mobile-install-sheet" id="iosInstallSheet" aria-labelledby="iosInstallTitle" hidden>
-        <span class="share-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4 4 4M5 12v8h14v-8"/></svg></span>
-        <div>
-          <p class="eyebrow">SAFARI INSTALL</p>
-          <h3 id="iosInstallTitle">Add Perloy to your Home Screen</h3>
-          <ol><li>Tap Safari’s <strong>Share</strong> button.</li><li>Choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</li></ol>
-        </div>
-      </section>
-      <section class="mobile-install-sheet" id="androidInstallSheet" aria-labelledby="androidInstallTitle" hidden>
-        <span class="share-symbol android-menu-symbol" aria-hidden="true">⋮</span>
-        <div>
-          <p class="eyebrow">ANDROID INSTALL</p>
-          <h3 id="androidInstallTitle">Install from your browser</h3>
-          <ol><li>Open Chrome’s menu.</li><li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li></ol>
-        </div>
-      </section>
+      <button class="button button-primary button-wide mobile-install-action" id="mobileInstallAction" type="button">Install Perloy</button>
       <p class="mobile-install-status" id="mobileInstallStatus" role="status" aria-live="polite"></p>
+      <section class="mobile-install-guide" id="iosInstallGuide" aria-labelledby="iosInstallTitle" hidden>
+        <p class="eyebrow">SAFARI · STEP 1 OF 2</p>
+        <div class="ios-guide-step">
+          <span class="ios-guide-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4 4 4M5 12v8h14v-8"/></svg></span>
+          <div><h3 id="iosInstallTitle">Tap Share in Safari</h3><p>Look for the square with an upward arrow at the bottom of Safari, or at the top on iPad.</p></div>
+        </div>
+        <div class="ios-guide-arrow" aria-hidden="true">↓</div>
+        <p class="eyebrow">STEP 2 OF 2</p>
+        <div class="ios-guide-step">
+          <span class="ios-guide-icon ios-add-icon" aria-hidden="true">＋</span>
+          <div><h3>Choose “Add to Home Screen”</h3><p>Confirm by tapping <strong>Add</strong>. Perloy will open from your Home Screen.</p></div>
+        </div>
+      </section>
+      <section class="mobile-install-guide android-install-guide" id="androidInstallGuide" hidden>
+        <p class="eyebrow">ANDROID INSTALL</p>
+        <div class="ios-guide-step"><span class="ios-guide-icon android-guide-icon" aria-hidden="true">↓</span><div><h3>Install Perloy</h3><p>Open the downloaded APK and approve installation when Android asks.</p></div></div>
+      </section>
     </div>
   </dialog>
 
