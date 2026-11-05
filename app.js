@@ -215,14 +215,39 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     }
   }
 
-  function setCloudStatus(label, message = '', isError = false) {
-    const state = $('cloudSyncState');
-    if (!state) return;
-    state.textContent = label;
-    state.title = message || 'Shared inventory status';
-    state.dataset.error = isError ? 'true' : 'false';
-    state.setAttribute('aria-label', message ? label + ': ' + message : label);
+  function setupDesktopDownloads() {
+    const releasePage = 'https://github.com/jaypeea/perloy/releases';
+    const installers = {
+      windows: import.meta.env.VITE_WINDOWS_INSTALLER_URL,
+      macos: import.meta.env.VITE_MAC_INSTALLER_URL
+    };
+
+    document.querySelectorAll('[data-platform-download]').forEach(link => {
+      const configuredUrl = String(installers[link.dataset.platformDownload] || '').trim();
+      let destination = releasePage;
+      let isDirectDownload = false;
+      try {
+        const url = new URL(configuredUrl);
+        if (url.protocol === 'https:') {
+          destination = url.href;
+          isDirectDownload = true;
+        }
+      } catch {}
+
+      link.href = destination;
+      const action = link.querySelector('[data-download-action]');
+      if (action) action.textContent = isDirectDownload ? 'Download installer' : 'View releases';
+    });
+
+    const menu = $('desktopDownloads');
+    document.addEventListener('click', event => {
+      if (menu.open && !menu.contains(event.target)) menu.open = false;
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') menu.open = false;
+    });
   }
+
   function readCloudBackups() {
     try {
       const backups = JSON.parse(localStorage.getItem(CLOUD_BACKUP_KEY) || '[]');
@@ -238,8 +263,8 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
       backups.push({ savedAt: new Date().toISOString(), payload: copy(data) });
       localStorage.setItem(CLOUD_BACKUP_KEY, JSON.stringify(backups.slice(-3)));
       return true;
-    } catch {
-      setCloudStatus('Backup needed', 'Perloy could not preserve this device’s local records, so it did not replace them. Export this data and retry.', true);
+    } catch (error) {
+      console.error('Could not preserve local records before applying shared data.', error);
       return false;
     }
   }
@@ -248,19 +273,12 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     if (!validDictionary(payload)) throw new Error('The cloud record does not match Perloy’s data structure.');
     const remoteData = normalizeDictionary(payload);
     if (JSON.stringify(normalizeDictionary(data)) === JSON.stringify(remoteData)) return false;
-    if (preserveLocal && !preserveLocalBeforeCloud(remoteData)) throw new Error('Could not preserve this device’s local records, so the cloud copy was not applied.');
+    if (preserveLocal && !preserveLocalBeforeCloud(remoteData)) throw new Error('Could not preserve local records, so the shared copy was not applied.');
     data = remoteData;
     normalizeProductSkus();
     saveData();
     renderAll();
     return true;
-  }
-
-  function isNativeShell() {
-    return ['native', 'desktop'].includes(import.meta.env.MODE) ||
-      window.location.protocol === 'file:' ||
-      window.location.protocol === 'capacitor:' ||
-      /Electron/i.test(navigator.userAgent);
   }
 
   async function fetchCloudState() {
@@ -280,20 +298,15 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
         try {
           applyCloudPayload(change.new.payload, !cloudReady);
           cloudReady = true;
-          setCloudStatus('Live', 'The shared inventory is updating across Perloy apps.');
         } catch (error) {
-          setCloudStatus('Sync error', error.message, true);
+          console.error('Could not apply a live shared-data update.', error);
         }
       })
       .subscribe(status => {
         if (generation !== cloudGeneration) return;
-        if (status === 'SUBSCRIBED') {
-          setCloudStatus(cloudReady ? 'Live' : 'Waiting', cloudReady
-            ? 'Live sync is connected.'
-            : 'Waiting for the shared inventory to become available.');
-          refreshCloudState(generation);
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setCloudStatus('Reconnecting', 'Live updates are reconnecting. Changes will sync when the connection returns.', true);
+        if (status === 'SUBSCRIBED') refreshCloudState(generation);
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('Perloy shared-data realtime connection is retrying.', status);
         }
       });
   }
@@ -305,9 +318,8 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
       if (generation !== cloudGeneration || !row?.payload) return;
       applyCloudPayload(row.payload, !cloudReady);
       cloudReady = true;
-      setCloudStatus('Live', 'Shared inventory is up to date.');
     } catch (error) {
-      setCloudStatus('Sync error', error.message || 'Could not refresh the shared inventory.', true);
+      console.error('Could not refresh Perloy shared data.', error);
     }
   }
 
@@ -315,12 +327,11 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     if (!cloudConfigured || !supabase || cloudReady || cloudConnecting) return;
     cloudConnecting = true;
     const generation = ++cloudGeneration;
-    setCloudStatus('Connecting', 'Loading the shared inventory…');
 
     try {
       let row = await fetchCloudState();
       if (generation !== cloudGeneration) return;
-      if (!row && !isNativeShell()) {
+      if (!row) {
         const { data: created, error } = await supabase.from(CLOUD_STATE_TABLE)
           .insert({ id: CLOUD_STATE_ID, payload: copy(data) }).select('payload').single();
         if (error?.code === '23505') row = await fetchCloudState();
@@ -330,17 +341,12 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
 
       if (generation !== cloudGeneration) return;
       if (row?.payload) {
-        const changed = applyCloudPayload(row.payload, true);
+        applyCloudPayload(row.payload, true);
         cloudReady = true;
-        setCloudStatus('Live', changed
-          ? 'Shared inventory loaded. Any different local records were saved in a backup.'
-          : 'All Perloy apps are connected to the shared inventory.');
-      } else {
-        setCloudStatus('Waiting', 'Waiting for the web version to publish its current inventory. This app’s local records remain saved.');
       }
       startCloudRealtime(generation);
     } catch (error) {
-      setCloudStatus('Sync error', error.message || 'Could not connect to the shared inventory. Check the Supabase setup.', true);
+      console.error('Could not connect to Perloy shared data.', error);
     } finally {
       if (generation === cloudGeneration) cloudConnecting = false;
     }
@@ -351,22 +357,18 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     const payload = copy(data);
     cloudWriteQueue = cloudWriteQueue.catch(() => {}).then(async () => {
       if (!cloudReady) return;
-      setCloudStatus('Saving', 'Saving changes to the shared inventory…');
       const { error } = await supabase.from(CLOUD_STATE_TABLE).upsert({
         id: CLOUD_STATE_ID, payload, updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
-      if (error) setCloudStatus('Sync error', error.message || 'Cloud save failed. Your local copy is still saved.', true);
-      else setCloudStatus('Live', 'Changes are synced across Perloy apps.');
-    }).catch(error => setCloudStatus('Sync error', error.message || 'Cloud save failed. Your local copy is still saved.', true));
+      if (error) console.error('Could not save Perloy shared data.', error);
+    }).catch(error => console.error('Could not save Perloy shared data.', error));
   }
 
   function initializeCloudSync() {
-    if (!cloudConfigured || !supabase) {
-      setCloudStatus('Setup needed', 'Add the Supabase project URL and publishable key to connect this app.');
-      return;
-    }
+    if (!cloudConfigured || !supabase) return;
     void connectCloudState();
   }
+
   function setNotice(message, isError = false) {
     const notice = $('appNotice');
     notice.textContent = message;
@@ -887,6 +889,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     $('addSupplierFromSupply').addEventListener('click', () => $('addSupplier').click());
     $('openSchema').addEventListener('click', () => openDialog('schemaDialog'));
     $('exportData').addEventListener('click', exportData);
+    setupDesktopDownloads();
     document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', closeDialogs));
     $('inventorySearch').addEventListener('input', renderInventory);
     $('stockFilter').addEventListener('change', renderInventory);

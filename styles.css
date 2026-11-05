@@ -200,10 +200,6 @@ tbody tr:hover { background: #f8faf9; }
 .dialog-action-spacer { flex: 1; }
 .dialog-actions .button-danger { margin-right: auto; }
 .dialog-wide { width: min(100% - 32px, 920px); }
-.cloud-sync-state { display: inline-flex; align-items: center; min-height: 24px; color: var(--muted); font: 500 8px/1 var(--font-mono); text-transform: uppercase; white-space: nowrap; }
-.cloud-sync-state[data-error="true"] { color: var(--danger); }
-.ios-add-icon { font-size: 25px; }
-.android-guide-icon { font: 600 20px/1 var(--font-mono); }
 .dialog-copy { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
 .schema-content { display: grid; gap: 16px; }
 .schema-table { min-width: 0; }

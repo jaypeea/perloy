@@ -8,9 +8,6 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "mobile:sync": "vite build --mode native --base=./ && npx cap sync",
-    "mobile:android": "npx cap open android",
-    "mobile:ios": "npx cap open ios",
     "desktop:dev": "concurrently -k \"vite --host 127.0.0.1 --port 5173\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "desktop:build:win": "vite build --mode desktop --base=./ && electron-builder --win nsis",
     "desktop:build:mac": "vite build --mode desktop --base=./ && electron-builder --mac dmg"
@@ -50,18 +47,13 @@
     }
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.6.0",
     "concurrently": "^10.0.6",
     "electron": "^45.2.3",
     "electron-builder": "^26.18.0",
-    "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "wait-on": "^9.5.1"
   },
   "dependencies": {
-    "@capacitor/android": "^8.6.0",
-    "@capacitor/core": "^8.6.0",
-    "@capacitor/ios": "^8.6.0",
     "@supabase/supabase-js": "^2.119.0"
   }
 }
