@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Perloy">
-  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="./pwa-192x192.png" type="image/png">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <title>Perloy | Inventory</title>
@@ -304,9 +304,12 @@
           <div><h3>Choose “Add to Home Screen”</h3><p>Confirm by tapping <strong>Add</strong>. Perloy will open from your Home Screen.</p></div>
         </div>
       </section>
-      <section class="mobile-install-guide android-install-guide" id="androidInstallGuide" hidden>
-        <p class="eyebrow">ANDROID INSTALL</p>
-        <div class="ios-guide-step"><span class="ios-guide-icon android-guide-icon" aria-hidden="true">↓</span><div><h3>Install Perloy</h3><p>Open the downloaded APK and approve installation when Android asks.</p></div></div>
+      <section class="mobile-install-guide android-install-guide" id="androidInstallGuide" aria-labelledby="androidInstallTitle" hidden>
+        <p class="eyebrow">ANDROID · STEP 1 OF 2</p>
+        <div class="ios-guide-step"><span class="ios-guide-icon android-guide-icon" aria-hidden="true">⋮</span><div><h3 id="androidInstallTitle">Open the browser menu</h3><p>In Chrome or Edge, tap the menu button at the top of the screen.</p></div></div>
+        <div class="ios-guide-arrow" aria-hidden="true">↓</div>
+        <p class="eyebrow">STEP 2 OF 2</p>
+        <div class="ios-guide-step"><span class="ios-guide-icon android-guide-icon" aria-hidden="true">＋</span><div><h3>Choose “Install app”</h3><p>If that option is not listed, choose “Add to Home screen”.</p></div></div>
       </section>
     </div>
   </dialog>

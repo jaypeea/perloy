@@ -1,6 +1,5 @@
 import QRCode from 'qrcode';
 import { detectPlatform } from './platform.js';
-import { installerUrls } from './download-config.js';
 
 (() => {
   'use strict';
@@ -452,14 +451,6 @@ import { installerUrls } from './download-config.js';
     dialog.querySelector('input:not([type="hidden"]), textarea, select')?.focus();
   }
 
-  function safeInstallerUrl(value) {
-    if (!value) return '';
-    try {
-      const url = new URL(String(value).trim(), window.location.origin);
-      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
-    } catch { return ''; }
-  }
-
   function downloadFile(url, filename) {
     const link = document.createElement('a');
     link.href = url;
@@ -468,6 +459,19 @@ import { installerUrls } from './download-config.js';
     document.body.append(link);
     link.click();
     link.remove();
+  }
+
+  function downloadLocalLauncher(platform) {
+    const appUrl = window.location.origin;
+    const isWindows = platform === 'windows';
+    const filename = isWindows ? 'Install-Perloy-Windows.bat' : 'Perloy-Mac.command';
+    const content = isWindows
+      ? '@echo off\r\nset "PERLOY_URL=' + appUrl + '"\r\nstart "" msedge --app="%PERLOY_URL%" || start "" chrome --app="%PERLOY_URL%" || start "" "%PERLOY_URL%"\r\n'
+      : '#!/bin/bash\nPERLOY_URL=' + appUrl + '\nopen -na "Microsoft Edge" --args --app="$PERLOY_URL" 2>/dev/null || open -na "Google Chrome" --args --app="$PERLOY_URL" 2>/dev/null || open "$PERLOY_URL"\n';
+    const fileUrl = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+    downloadFile(fileUrl, filename);
+    window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000);
+    return filename;
   }
 
   function setActionState(button, status, message, label) {
@@ -482,7 +486,7 @@ import { installerUrls } from './download-config.js';
     }
   }
 
-  function openMobileInstallGuide(platform) {
+  function openMobileInstallGuide(platform, showSteps = false) {
     const ios = platform === 'ios';
     const dialog = $('mobileInstallDialog');
     $('mobileInstallTitle').textContent = ios ? 'Install Perloy for iPhone' : 'Install Perloy for Android';
@@ -495,6 +499,10 @@ import { installerUrls } from './download-config.js';
     $('androidInstallGuide').hidden = true;
     $('mobileInstallStatus').textContent = ios ? 'Safari adds web apps from its Share menu.' : '';
     if (!dialog.open) dialog.showModal();
+    if (showSteps) {
+      if (ios) showIosSteps();
+      else showAndroidSteps();
+    }
     $('mobileInstallAction').focus();
   }
 
@@ -503,6 +511,13 @@ import { installerUrls } from './download-config.js';
     $('mobileInstallStatus').textContent = 'Follow the two Safari steps below to add Perloy.';
     $('iosInstallGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     $('mobileInstallAction').textContent = 'Safari install steps shown';
+  }
+
+  function showAndroidSteps() {
+    $('androidInstallGuide').hidden = false;
+    $('mobileInstallStatus').textContent = 'Open the browser menu, then choose Install app.';
+    $('androidInstallGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    $('mobileInstallAction').textContent = 'Android install steps shown';
   }
 
   async function renderDownloadQr() {
@@ -521,46 +536,46 @@ import { installerUrls } from './download-config.js';
     }
   }
 
-  async function installForPlatform(platform, surface = 'modal', actionButton = null) {
+  function installForPlatform(platform, surface = 'modal', actionButton = null) {
     const mobileSurface = surface === 'mobile';
     const button = actionButton || $(mobileSurface ? 'mobileInstallAction' : 'primaryInstall');
     const status = $(mobileSurface ? 'mobileInstallStatus' : 'primaryInstallStatus');
     if (platform === 'ios') {
-      openMobileInstallGuide('ios');
+      openMobileInstallGuide('ios', true);
       return;
     }
 
     const promptEvent = platform === detectPlatform().os || platform === 'other' ? window.__perloyDeferredPrompt : null;
     if (promptEvent) {
       window.__perloyDeferredPrompt = null;
-      let promptPromise;
-      try { promptPromise = promptEvent.prompt(); } catch { promptPromise = null; }
-      setActionState(button, status, 'Opening the install prompt…', 'Opening…');
-      if (promptPromise) {
-        try {
-          const choice = await promptEvent.userChoice;
+      try {
+        const promptResult = promptEvent.prompt();
+        setActionState(button, status, 'Complete the browser install prompt to add Perloy.', 'Install prompt open');
+        Promise.resolve(promptEvent.userChoice).then(choice => {
           if (choice?.outcome === 'accepted') {
             setActionState(button, status, 'Perloy is being installed on this device.', 'Installing…');
-            return;
+          } else {
+            setActionState(button, status, 'Install prompt dismissed. Click again to download a local launcher.', 'Try local download');
           }
-        } catch { /* Use the platform installer when the browser prompt closes. */ }
-      }
+        }).catch(() => setActionState(button, status, 'Install prompt closed. Click again to download a local launcher.', 'Try local download'));
+        if (promptResult && typeof promptResult.catch === 'function') promptResult.catch(() => {});
+        return;
+      } catch { /* Use the local launcher or mobile install guide if the browser prompt fails. */ }
     }
 
-    const url = safeInstallerUrl(installerUrls[platform]);
-    if (url) {
-      const filename = { windows: 'Perloy-Setup.exe', macos: 'Perloy.dmg', android: 'Perloy.apk' }[platform];
-      downloadFile(url, filename);
-      setActionState(button, status, 'The ' + filename + ' download has started.', 'Downloading installer…');
+    if (platform === 'windows' || platform === 'macos') {
+      const filename = downloadLocalLauncher(platform);
+      setActionState(button, status, filename + ' downloaded. Open it to launch Perloy in app mode.', 'Launcher downloaded');
       return;
     }
 
     if (platform === 'android') {
-      $('androidInstallGuide').hidden = false;
-      setActionState(button, status, 'The installer is not published yet. Use the Android install steps below.', 'Installer unavailable');
+      openMobileInstallGuide('android', true);
+      setActionState(button, status, 'Android install steps are open.', 'Install steps shown');
       return;
     }
-    setActionState(button, status, 'A packaged installer is not available for this platform yet.', 'Installer unavailable');
+
+    setActionState(button, status, 'Install Perloy from this browser when the install option is available.', 'Install Perloy');
   }
 
   async function configureDownloadModal() {
