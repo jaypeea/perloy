@@ -1,5 +1,3 @@
-import QRCode from 'qrcode';
-import { detectPlatform } from './platform.js';
 import { cloudConfigured, supabase } from './cloud-sync.js';
 
 (() => {
@@ -75,7 +73,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   let data = copy(EMPTY_DATA);
   let toastTimer;
   let stateNotice = '';
-  let mobileInstallTarget = 'android';
   const CLOUD_STATE_TABLE = 'perloy_shared_state';
   const CLOUD_STATE_ID = 'global';
   let cloudReady = false;
@@ -83,23 +80,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   let cloudGeneration = 0;
   let cloudChannel = null;
   let cloudWriteQueue = Promise.resolve();
-  window.addEventListener('pwa-install-ready', () => {
-    const status = $('primaryInstallStatus');
-    if (status && !status.textContent) status.textContent = 'Perloy can be installed on this device.';
-  });
-
-  window.addEventListener('appinstalled', () => {
-    window.__perloyDeferredPrompt = null;
-    const trigger = $('openDownload');
-    if (trigger) trigger.hidden = true;
-    const status = $('primaryInstallStatus');
-    if (status) status.textContent = 'Perloy is installed on this device.';
-    const action = $('primaryInstallLabel');
-    if (action) action.textContent = 'Installed';
-    const mobileStatus = $('mobileInstallStatus');
-    if (mobileStatus) mobileStatus.textContent = 'Perloy is installed on this device.';
-  });
-
   function validDictionary(value) {
     return value && [1, 2, 3, 4, 5].includes(value.schemaVersion) && Object.keys(SCHEMA).every(table => Array.isArray(value[table]));
   }
@@ -615,196 +595,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     dialog.querySelector('input:not([type="hidden"]), textarea, select')?.focus();
   }
 
-  function downloadFile(url, filename) {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.rel = 'noopener noreferrer';
-    document.body.append(link);
-    link.click();
-    link.remove();
-  }
-
-  function downloadLocalLauncher(platform) {
-    const appUrl = window.location.origin;
-    const isWindows = platform === 'windows';
-    const filename = isWindows ? 'Install-Perloy-Windows.bat' : 'Perloy-Mac.command';
-    const content = isWindows
-      ? '@echo off\r\nset "PERLOY_URL=' + appUrl + '"\r\nstart "" msedge --app="%PERLOY_URL%" || start "" chrome --app="%PERLOY_URL%" || start "" "%PERLOY_URL%"\r\n'
-      : '#!/bin/bash\nPERLOY_URL=' + appUrl + '\nopen -na "Microsoft Edge" --args --app="$PERLOY_URL" 2>/dev/null || open -na "Google Chrome" --args --app="$PERLOY_URL" 2>/dev/null || open "$PERLOY_URL"\n';
-    const fileUrl = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
-    downloadFile(fileUrl, filename);
-    window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000);
-    return filename;
-  }
-
-  function setActionState(button, status, message, label) {
-    if (status) status.textContent = message;
-    if (button && label) {
-      const original = button.dataset.defaultLabel || button.textContent.trim();
-      button.dataset.defaultLabel = original;
-      button.textContent = label;
-      window.setTimeout(() => {
-        if (button.isConnected && button.dataset.defaultLabel) button.textContent = button.dataset.defaultLabel;
-      }, 5000);
-    }
-  }
-
-  function openMobileInstallGuide(platform, showSteps = false) {
-    const ios = platform === 'ios';
-    const dialog = $('mobileInstallDialog');
-    $('mobileInstallTitle').textContent = ios ? 'Install Perloy for iPhone' : 'Install Perloy for Android';
-    $('mobileInstallDescription').textContent = ios
-      ? 'Add the stockroom to your Home Screen from Safari.'
-      : 'Install Perloy on this Android device.';
-    mobileInstallTarget = platform;
-    $('mobileInstallAction').textContent = ios ? 'Install Perloy for iPhone' : 'Install Perloy for Android';
-    $('iosInstallGuide').hidden = true;
-    $('androidInstallGuide').hidden = true;
-    $('mobileInstallStatus').textContent = ios ? 'Safari adds web apps from its Share menu.' : '';
-    if (!dialog.open) dialog.showModal();
-    if (showSteps) {
-      if (ios) showIosSteps();
-      else showAndroidSteps();
-    }
-    $('mobileInstallAction').focus();
-  }
-
-  function showIosSteps() {
-    $('iosInstallGuide').hidden = false;
-    $('mobileInstallStatus').textContent = 'Follow the two Safari steps below to add Perloy.';
-    $('iosInstallGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    $('mobileInstallAction').textContent = 'Safari install steps shown';
-  }
-
-  function showAndroidSteps() {
-    $('androidInstallGuide').hidden = false;
-    $('mobileInstallStatus').textContent = 'Open the browser menu, then choose Install app.';
-    $('androidInstallGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    $('mobileInstallAction').textContent = 'Android install steps shown';
-  }
-
-  async function renderDownloadQr() {
-    const host = $('downloadQr');
-    const installUrl = new URL('/?install=1', window.location.origin).href;
-    try {
-      const svg = await QRCode.toString(installUrl, {
-        type: 'svg', errorCorrectionLevel: 'M', margin: 1, width: 224,
-        color: { dark: '#18211c', light: '#ffffff' }
-      });
-      host.innerHTML = svg;
-      host.setAttribute('aria-label', 'QR code linking to ' + installUrl);
-    } catch {
-      host.textContent = installUrl;
-      host.setAttribute('role', 'link');
-    }
-  }
-
-  function installForPlatform(platform, surface = 'modal', actionButton = null) {
-    const mobileSurface = surface === 'mobile';
-    const button = actionButton || $(mobileSurface ? 'mobileInstallAction' : 'primaryInstall');
-    const status = $(mobileSurface ? 'mobileInstallStatus' : 'primaryInstallStatus');
-    if (platform === 'ios') {
-      openMobileInstallGuide('ios', true);
-      return;
-    }
-
-    const promptEvent = platform === detectPlatform().os || platform === 'other' ? window.__perloyDeferredPrompt : null;
-    if (promptEvent) {
-      window.__perloyDeferredPrompt = null;
-      try {
-        const promptResult = promptEvent.prompt();
-        setActionState(button, status, 'Complete the browser install prompt to add Perloy.', 'Install prompt open');
-        Promise.resolve(promptEvent.userChoice).then(choice => {
-          if (choice?.outcome === 'accepted') {
-            setActionState(button, status, 'Perloy is being installed on this device.', 'Installing…');
-          } else {
-            setActionState(button, status, 'Install prompt dismissed. Click again to download a local launcher.', 'Try local download');
-          }
-        }).catch(() => setActionState(button, status, 'Install prompt closed. Click again to download a local launcher.', 'Try local download'));
-        if (promptResult && typeof promptResult.catch === 'function') promptResult.catch(() => {});
-        return;
-      } catch { /* Use the local launcher or mobile install guide if the browser prompt fails. */ }
-    }
-
-    if (platform === 'windows' || platform === 'macos') {
-      const filename = downloadLocalLauncher(platform);
-      setActionState(button, status, filename + ' downloaded. Open it to launch Perloy in app mode.', 'Launcher downloaded');
-      return;
-    }
-
-    if (platform === 'android') {
-      openMobileInstallGuide('android', true);
-      setActionState(button, status, 'Android install steps are open.', 'Install steps shown');
-      return;
-    }
-
-    setActionState(button, status, 'Install Perloy from this browser when the install option is available.', 'Install Perloy');
-  }
-
-  async function configureDownloadModal() {
-    const dialog = $('downloadDialog');
-    const trigger = $('openDownload');
-    const mobileDialog = $('mobileInstallDialog');
-    const device = detectPlatform();
-    const displayMode = window.matchMedia?.('(display-mode: standalone)');
-    const updateTriggerVisibility = () => {
-      trigger.hidden = Boolean(device.standalone || displayMode?.matches || navigator.standalone === true);
-    };
-    updateTriggerVisibility();
-    if (displayMode?.addEventListener) displayMode.addEventListener('change', updateTriggerVisibility);
-    else displayMode?.addListener?.(updateTriggerVisibility);
-
-    const platformNames = { windows: 'Windows', macos: 'macOS', android: 'Android', ios: 'iPhone' };
-    const currentPlatform = device.os;
-    const title = currentPlatform === 'ios' ? 'Install Perloy for iPhone'
-      : currentPlatform === 'other' ? 'Install Perloy on this device'
-        : 'Download Perloy for ' + platformNames[currentPlatform];
-    $('primaryInstallTitle').textContent = title;
-    $('primaryInstallLabel').textContent = currentPlatform === 'ios' ? 'Install Perloy for iPhone'
-      : currentPlatform === 'other' ? 'Install Perloy'
-        : (currentPlatform === 'android' ? 'Install Perloy for Android' : 'Download Perloy for ' + platformNames[currentPlatform]);
-    $('primaryInstallDescription').textContent = currentPlatform === 'ios'
-      ? 'Add Perloy to your iPhone or iPad Home Screen from Safari.'
-      : currentPlatform === 'android'
-        ? 'Add Perloy to your Home Screen or install the Android app.'
-        : 'Get a standalone Perloy window and keep this browser’s inventory records.';
-    $('downloadQrPanel').hidden = device.isMobile;
-
-    if (window.__perloyDeferredPrompt) $('primaryInstallStatus').textContent = 'One-tap install is available on this device.';
-
-    trigger.addEventListener('click', async () => {
-      if (!dialog.open) dialog.showModal();
-      $('closeDownload').focus();
-      await renderDownloadQr();
-    });
-    $('closeDownload').addEventListener('click', () => dialog.close());
-    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
-    $('primaryInstall').addEventListener('click', () => installForPlatform(currentPlatform, 'modal', $('primaryInstallLabel')));
-    document.querySelectorAll('[data-install-platform]').forEach(button => {
-      button.addEventListener('click', () => installForPlatform(button.dataset.installPlatform, 'modal', $('primaryInstallLabel')));
-    });
-
-    $('closeMobileInstall').addEventListener('click', () => mobileDialog.close());
-    mobileDialog.addEventListener('click', event => { if (event.target === mobileDialog) mobileDialog.close(); });
-    $('mobileInstallAction').addEventListener('click', () => {
-      if (mobileInstallTarget === 'ios') showIosSteps();
-      else installForPlatform(mobileInstallTarget, 'mobile');
-    });
-
-    if (new URLSearchParams(window.location.search).get('install') === '1' && device.isMobile && !device.standalone) {
-      if (!mobileDialog.open) mobileDialog.showModal();
-      const mobilePlatform = device.os === 'ios' ? 'ios' : 'android';
-      mobileInstallTarget = mobilePlatform;
-      $('mobileInstallAction').textContent = mobilePlatform === 'ios' ? 'Install Perloy for iPhone' : 'Install Perloy for Android';
-      $('mobileInstallTitle').textContent = mobilePlatform === 'ios' ? 'Install Perloy for iPhone' : 'Install Perloy for Android';
-      $('mobileInstallDescription').textContent = mobilePlatform === 'ios'
-        ? 'Add the stockroom to your Home Screen from Safari.'
-        : 'Install Perloy on this Android device.';
-      $('mobileInstallAction').focus();
-    }
-  }
-
   function closeDialogs() {
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   }
@@ -1077,7 +867,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     renderSchema();
     setDateDefaults();
     renderAll();
-    configureDownloadModal();
     if (stateNotice) setNotice(stateNotice, stateNotice.startsWith('Saved data could not'));
 
     document.querySelectorAll('.nav-link').forEach(button => button.addEventListener('click', () => navigate(button.dataset.view)));
