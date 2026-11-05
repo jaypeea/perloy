@@ -73,7 +73,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   let data = copy(EMPTY_DATA);
   let toastTimer;
   let stateNotice = '';
-  const CLOUD_STATE_TABLE = 'perloy_shared_state';
+  const CLOUD_STATE_TABLE = 'perloy_state';
   const CLOUD_STATE_ID = 'global';
   let cloudReady = false;
   let cloudConnecting = false;
@@ -290,7 +290,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
 
   function startCloudRealtime(generation) {
     if (cloudChannel) void supabase.removeChannel(cloudChannel);
-    cloudChannel = supabase.channel('perloy-shared-state')
+    cloudChannel = supabase.channel('perloy-state-global')
       .on('postgres_changes', {
         event: '*', schema: 'public', table: CLOUD_STATE_TABLE, filter: 'id=eq.' + CLOUD_STATE_ID
       }, change => {

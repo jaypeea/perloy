@@ -1,8 +1,10 @@
--- The global row is now the only app-facing state table.
--- Keep legacy per-user payloads for recovery, but disable all account-scoped access.
+-- Only clean up the old account-scoped table shape. The global perloy_state row has no user_id column.
 do $$
 begin
-  if to_regclass('public.perloy_state') is null then
+  if to_regclass('public.perloy_state') is null or not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'perloy_state' and column_name = 'user_id'
+  ) then
     return;
   end if;
 

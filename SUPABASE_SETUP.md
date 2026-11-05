@@ -1,6 +1,6 @@
 # Perloy shared inventory sync
 
-The website and Windows/macOS desktop apps share one Supabase row automatically. No account, sign-in, or manual sync action is required. Any client can create the initial row from its saved data; all others load the shared copy and subscribe to updates.
+The website and Windows/macOS desktop apps share public.perloy_state with id=global automatically. No account, sign-in, or manual sync action is required. Any client can create the initial row from its saved data; all others load the shared copy and subscribe to updates.
 
 ## Important access model
 
@@ -8,7 +8,7 @@ The app includes a Supabase publishable key. The shared row has anonymous read, 
 
 ## Database migration
 
-For the existing Supabase project, run supabase/migrations/202611060002_perloy_global_row.sql, then 202611060003_disable_legacy_user_sync.sql in the SQL Editor. The first migrates the existing shared row from id=default to id=global, or copies the latest valid payload from the old per-user table if the shared row has not been created yet. It preserves that table as a recovery copy, configures anonymous read/write access to the global row, and enables Realtime. The second removes account-based policies from the unused recovery table without deleting its data.
+For an existing project, run supabase/migrations/202611060004_global_perloy_state.sql in the SQL Editor after the earlier Perloy migrations. It moves the current id=global payload into public.perloy_state, or migrates the latest valid legacy payload if needed. It keeps the old tables as locked recovery copies, enables anonymous read/write access to the single global row, and adds that table to Realtime. Fresh setups should apply the migrations in timestamp order.
 
 If there is no existing cloud payload, the first client seeds the row from its current saved data. Other clients load that row automatically. Any device-local records replaced by the shared row remain in a local backup included with Export data.
 
