@@ -39,7 +39,7 @@
       "target": [
         "dmg"
       ],
-      "artifactName": "Perloy.${ext}"
+      "artifactName": "Perloy-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
