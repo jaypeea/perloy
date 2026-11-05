@@ -73,21 +73,19 @@ import QRCode from 'qrcode';
   let toastTimer;
   let stateNotice = '';
   let qrRendered = false;
-  window.deferredInstallPrompt = null;
-
-  window.addEventListener('beforeinstallprompt', event => {
-    event.preventDefault();
-    window.deferredInstallPrompt = event;
+  window.addEventListener('pwa-install-ready', () => {
     const installHelp = $('desktopInstallHelp');
     if (installHelp) installHelp.textContent = 'Your browser can install Perloy directly.';
   });
 
   window.addEventListener('appinstalled', () => {
-    window.deferredInstallPrompt = null;
+    window.__deferredPrompt = null;
     const downloadButton = $('openDownload');
     if (downloadButton) downloadButton.hidden = true;
     const installHelp = $('desktopInstallHelp');
     if (installHelp) installHelp.textContent = 'Perloy is installed on this device.';
+    const mobileStatus = $('mobileInstallStatus');
+    if (mobileStatus) mobileStatus.textContent = 'Perloy is installed on this device.';
   });
 
   function validDictionary(value) {
@@ -458,11 +456,66 @@ import QRCode from 'qrcode';
     } catch { return ''; }
   }
 
+  function isIosDevice() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function isMobileDevice() {
+    return isIosDevice() || /Android|Mobile/i.test(navigator.userAgent);
+  }
+
+  function isStandaloneApp() {
+    return Boolean(window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true || /\belectron\//i.test(navigator.userAgent));
+  }
+
+  function downloadFile(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.rel = 'noopener noreferrer';
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
+
+  function downloadSiteShortcut(target) {
+    const url = window.location.origin;
+    const filename = target === 'windows' ? 'Perloy.url' : 'Perloy.webloc';
+    const content = target === 'windows'
+      ? `[InternetShortcut]\r\nURL=${url}\r\n`
+      : `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>URL</key><string>${url.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char])}</string></dict></plist>`;
+    const blobUrl = URL.createObjectURL(new Blob([content], { type: target === 'windows' ? 'text/plain;charset=utf-8' : 'application/xml;charset=utf-8' }));
+    downloadFile(blobUrl, filename);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    return filename;
+  }
+
+  async function promptPwaInstall() {
+    const promptEvent = window.__deferredPrompt;
+    if (!promptEvent) return 'unavailable';
+    window.__deferredPrompt = null;
+    try {
+      await promptEvent.prompt();
+      return (await promptEvent.userChoice).outcome;
+    } catch { return 'unavailable'; }
+  }
+
+  function showMobileInstallGuide(platform) {
+    const ios = platform === 'ios';
+    $('iosInstallSheet').hidden = !ios;
+    $('androidInstallSheet').hidden = ios;
+    $('mobileInstallStatus').textContent = ios
+      ? 'Safari adds the app from its Share menu.'
+      : 'Use the browser install option to add Perloy to your Home Screen.';
+    (ios ? $('iosInstallSheet') : $('androidInstallSheet')).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
   async function renderDownloadQr() {
     if (qrRendered) return;
     const host = $('downloadQr');
     try {
-      const svg = await QRCode.toString(window.location.origin, {
+      const installUrl = new URL('/?install=1', window.location.origin).href;
+      const svg = await QRCode.toString(installUrl, {
         type: 'svg',
         errorCorrectionLevel: 'M',
         margin: 1,
@@ -470,13 +523,13 @@ import QRCode from 'qrcode';
         color: { dark: '#18211c', light: '#ffffff' }
       });
       host.innerHTML = svg;
-      host.setAttribute('aria-label', `QR code linking to ${window.location.origin}`);
+      host.setAttribute('aria-label', `QR code linking to ${installUrl}`);
       qrRendered = true;
     } catch {
       host.textContent = 'QR code unavailable. Open this address on your phone:';
       const address = document.createElement('span');
       address.className = 'qr-error-url';
-      address.textContent = window.location.origin;
+      address.textContent = new URL('/?install=1', window.location.origin).href;
       host.append(address);
     }
   }
@@ -485,9 +538,8 @@ import QRCode from 'qrcode';
     const dialog = $('downloadDialog');
     const trigger = $('openDownload');
     const displayMode = window.matchMedia?.('(display-mode: standalone)');
-    const isElectron = /\belectron\//i.test(navigator.userAgent);
     const updateTriggerVisibility = () => {
-      trigger.hidden = Boolean(isElectron || displayMode?.matches || navigator.standalone === true);
+      trigger.hidden = Boolean(displayMode?.matches || navigator.standalone === true || /\belectron\//i.test(navigator.userAgent));
     };
     updateTriggerVisibility();
     if (displayMode?.addEventListener) displayMode.addEventListener('change', updateTriggerVisibility);
@@ -518,7 +570,7 @@ import QRCode from 'qrcode';
 
     trigger.addEventListener('click', async () => {
       if (!dialog.open) dialog.showModal();
-      $('desktopInstallHelp').textContent = window.deferredInstallPrompt
+      $('desktopInstallHelp').textContent = window.__deferredPrompt
         ? 'Your browser can install Perloy directly.'
         : installerUrls.windows || installerUrls.mac
           ? 'Choose your system to install in the browser, or use a direct installer below.'
@@ -531,31 +583,54 @@ import QRCode from 'qrcode';
       if (event.target === dialog) dialog.close();
     });
 
-    const installDesktop = async target => {
-      const promptEvent = window.deferredInstallPrompt;
-      if (promptEvent) {
-        try {
-          window.deferredInstallPrompt = null;
-          await promptEvent.prompt();
-          const choice = await promptEvent.userChoice;
-          $('desktopInstallHelp').textContent = choice.outcome === 'accepted'
-            ? 'Perloy is installing. You can close this window.'
-            : 'Install was dismissed. Use your browser menu to install Perloy later.';
-        } catch {
-          $('desktopInstallHelp').textContent = 'Install prompt unavailable. Use your browser menu or the installer link below.';
-        }
-        return;
-      }
+    const startDesktopDownload = target => {
       if (installerUrls[target]) {
-        window.location.assign(installerUrls[target]);
+        downloadFile(installerUrls[target], target === 'windows' ? 'Perloy-Setup.exe' : 'Perloy-Installer.dmg');
+        $('desktopInstallHelp').textContent = 'Your installer download has started.';
         return;
       }
-      $('desktopInstallHelp').textContent = target === 'windows'
-        ? 'In Edge or Chrome, select the install icon in the address bar, or choose “Install Perloy” from the browser menu.'
-        : 'In Safari, choose File → Add to Dock. In Chrome or Edge, use the install icon or browser menu.';
+      const filename = downloadSiteShortcut(target);
+      $('desktopInstallHelp').textContent = `${filename} downloaded. Open it to launch Perloy in your default browser.`;
+    };
+    const installDesktop = async target => {
+      const outcome = await promptPwaInstall();
+      if (outcome === 'accepted') {
+        $('desktopInstallHelp').textContent = 'Perloy is installing. You can close this window.';
+        return;
+      }
+      startDesktopDownload(target);
     };
     $('installWindows').addEventListener('click', () => installDesktop('windows'));
     $('installMac').addEventListener('click', () => installDesktop('mac'));
+
+    const androidApkUrl = safeInstallerUrl(import.meta.env.VITE_ANDROID_APK_URL);
+    const mobileDialog = $('mobileInstallDialog');
+    $('closeMobileInstall').addEventListener('click', () => mobileDialog.close());
+    mobileDialog.addEventListener('click', event => {
+      if (event.target === mobileDialog) mobileDialog.close();
+    });
+    $('mobileInstallAction').addEventListener('click', async () => {
+      if (isIosDevice()) {
+        showMobileInstallGuide('ios');
+        return;
+      }
+      const outcome = await promptPwaInstall();
+      if (outcome === 'accepted') {
+        $('mobileInstallStatus').textContent = 'Perloy is installing. You can close this window.';
+        return;
+      }
+      if (androidApkUrl) {
+        downloadFile(androidApkUrl, 'Perloy.apk');
+        $('mobileInstallStatus').textContent = 'Your Android installer download has started.';
+        return;
+      }
+      showMobileInstallGuide('android');
+    });
+
+    if (new URLSearchParams(window.location.search).get('install') === '1' && isMobileDevice() && !isStandaloneApp()) {
+      mobileDialog.showModal();
+      $('mobileInstallAction').focus();
+    }
   }
 
   function closeDialogs() {
