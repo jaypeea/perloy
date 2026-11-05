@@ -1141,17 +1141,37 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   }
 
   async function createCloudAccount() {
-    if (!supabase || !cloudConfigured) return;
+    if (!supabase || !cloudConfigured) {
+      setCloudMessage('This app build is not connected to Supabase. Refresh the web app after its latest deployment.', true);
+      return;
+    }
+
+    const email = $('cloudEmail').value.trim();
+    const password = $('cloudPassword').value;
+    if (!email || !password) {
+      setCloudMessage('Enter your email and password first.', true);
+      return;
+    }
+
     const button = $('createCloudAccount');
+    const originalLabel = button.textContent;
     button.disabled = true;
-    setCloudMessage('Creating account…');
-    const { data: result, error } = await supabase.auth.signUp({
-      email: $('cloudEmail').value.trim(), password: $('cloudPassword').value
-    });
-    button.disabled = false;
-    if (error) setCloudMessage(error.message, true);
-    else if (result.session) setCloudMessage('Account created. Connecting shared records…');
-    else setCloudMessage('Check your email to confirm the account, then sign in here and on each app.');
+    button.textContent = 'Creating account…';
+    button.setAttribute('aria-busy', 'true');
+    setCloudMessage('Connecting to Supabase…');
+
+    try {
+      const { data: result, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      if (result.session) setCloudMessage('Account created. Connecting shared records…');
+      else setCloudMessage('Account created. Check your email to confirm, then sign in here and on each app.');
+    } catch (error) {
+      setCloudMessage(error.message || 'Could not reach Supabase. Check your connection and try again.', true);
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+      button.removeAttribute('aria-busy');
+    }
   }
 
   async function signOutFromCloud() {
