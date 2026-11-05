@@ -211,12 +211,8 @@ tbody tr:hover { background: #f8faf9; }
 .cloud-setup-hint strong { color: var(--ink); }
 .cloud-setup-hint p { margin: 8px 0 0; }
 .cloud-setup-hint code { font: 500 10px/1.4 var(--font-mono); color: var(--ink); overflow-wrap: anywhere; }
-.cloud-auth-fields { display: grid; gap: 8px; }
-.cloud-auth-fields label { margin-top: 4px; color: var(--ink); font-size: 11px; font-weight: 600; }
-.cloud-auth-actions, .cloud-signed-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
-.cloud-signed-in p { flex: 1 1 100%; color: var(--muted); font-size: 11px; }
-.cloud-signed-in strong { color: var(--ink); overflow-wrap: anywhere; }
-.cloud-auth-actions .button { min-height: 44px; }
+.cloud-sync-details { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.cloud-sync-details p { margin-bottom: 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .cloud-sync-dialog code { font-family: var(--font-mono); }
 .dialog-download { width: min(calc(100vw - 48px), 900px); max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px); padding: 0; }
 .download-modal { padding: 28px; }

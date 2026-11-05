@@ -1,22 +1,26 @@
-# Connect Perloy across devices
+# Perloy shared inventory sync
 
-Perloy stores the full data dictionary as one JSONB row per signed-in account. Supabase Auth and row-level security isolate each account. Sign in with the same email and password in the web app and every installed app to share records.
+Perloy web, Android, iOS, Windows, and macOS clients use the same Supabase row. No account or sign-in is required. The browser and installed apps keep local copies for offline use; the web client seeds the shared row when it does not exist, and native clients wait for that initial web copy.
 
-## Supabase project
+## Important access model
 
-1. Create a Supabase project.
-2. In **SQL Editor**, run the Perloy state migration at <code>supabase/migrations/202611050001_perloy_state.sql</code>.
-3. In **Project Settings → API**, copy the project URL and the public anon or publishable key. Do not use the service-role key in this client app.
-4. Set the project’s Site URL to the deployed Perloy web URL and allow that URL plus <code>http://localhost:5173/**</code> in Auth redirect URLs. Email confirmation can remain enabled; confirm the first account before signing in on the other apps.
+The app uses a Supabase publishable key in client builds. The shared row has anonymous read, insert, and update policies, so anyone with the deployed app or project URL can read and change the inventory. This includes sales and customer or supplier details. Do not store data here that must remain private. There is no per-user isolation or access control.
 
-## Configure and seed
+## Database migration
 
-1. Copy <code>.env.example</code> to <code>.env.local</code> and fill in <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code>.
-2. Add the same two variables to the Vercel project’s Production, Preview, and Development environments, then redeploy.
-3. Add them as GitHub Actions repository variables with the same names so desktop and Android release builds include the shared backend configuration.
-4. Rebuild native apps with the same environment variables. For local builds, <code>.env.local</code> is read by Vite.
-5. Open the web version that already contains the current records, choose **Cloud sync**, and sign in or create the account. If the account has no cloud row yet, that web version seeds it. Then sign in with the same account in the installed apps.
+For the existing Perloy Supabase project, run supabase/migrations/202611060001_perloy_shared_state.sql in the SQL Editor. It creates public.perloy_shared_state with the fixed default row key, copies the most recently updated payload from the old public.perloy_state table when one exists, enables anonymous access and Realtime, and leaves the old table intact as a recovery copy.
 
-The first cloud copy replaces each app’s active local view so all versions match. If an app had different local records, Perloy saves those records in a local backup first; **Download saved local copy** exports that backup. A native app waits for the web version to seed an empty account rather than uploading its local copy over the web data.
+If the old per-user table had no rows, the first web app that connects seeds the shared row from its current browser data. Native apps do not seed an empty database, so a blank native install cannot overwrite the web inventory.
 
-Changes save locally first, then sync to Supabase. Other signed-in apps receive database updates in real time and refresh from the cloud when they return to the foreground. Without the two environment variables, the app remains local-only and shows setup status in the Cloud sync dialog.
+## App configuration
+
+Set these values for the web deployment, native builds, and local development:
+
+- VITE_SUPABASE_URL: the project URL, such as https://your-project.supabase.co
+- VITE_SUPABASE_ANON_KEY: the Supabase publishable key (sb_publishable_…) or legacy anon key
+
+For local development, put them in .env.local. In Vercel, set them for Production, Preview, and Development, then redeploy. In GitHub, set them under Settings → Secrets and variables → Actions → Variables for native release builds. Never use a secret or service-role key in these client applications.
+
+## Sync behavior
+
+Edits save to local storage first and upsert the shared JSON payload. Supabase Realtime pushes row updates to other running clients, and a client refreshes the row when it returns to the foreground. The newest write replaces the row payload, so simultaneous edits can overwrite one another. Local copies replaced by an existing shared row are saved as downloadable backups from Cloud sync.

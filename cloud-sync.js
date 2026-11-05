@@ -6,6 +6,6 @@ const publicKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 export const cloudConfigured = Boolean(projectUrl && publicKey);
 export const supabase = cloudConfigured
   ? createClient(projectUrl, publicKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
     })
   : null;
