@@ -1,3 +1,5 @@
+import QRCode from 'qrcode';
+
 (() => {
   'use strict';
 
@@ -70,6 +72,23 @@
   let data = copy(EMPTY_DATA);
   let toastTimer;
   let stateNotice = '';
+  let qrRendered = false;
+  window.deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    window.deferredInstallPrompt = event;
+    const installHelp = $('desktopInstallHelp');
+    if (installHelp) installHelp.textContent = 'Your browser can install Perloy directly.';
+  });
+
+  window.addEventListener('appinstalled', () => {
+    window.deferredInstallPrompt = null;
+    const downloadButton = $('openDownload');
+    if (downloadButton) downloadButton.hidden = true;
+    const installHelp = $('desktopInstallHelp');
+    if (installHelp) installHelp.textContent = 'Perloy is installed on this device.';
+  });
 
   function validDictionary(value) {
     return value && [1, 2, 3, 4, 5].includes(value.schemaVersion) && Object.keys(SCHEMA).every(table => Array.isArray(value[table]));
@@ -431,6 +450,114 @@
     dialog.querySelector('input:not([type="hidden"]), textarea, select')?.focus();
   }
 
+  function safeInstallerUrl(value) {
+    if (!value) return '';
+    try {
+      const url = new URL(String(value).trim(), window.location.origin);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch { return ''; }
+  }
+
+  async function renderDownloadQr() {
+    if (qrRendered) return;
+    const host = $('downloadQr');
+    try {
+      const svg = await QRCode.toString(window.location.origin, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 208,
+        color: { dark: '#18211c', light: '#ffffff' }
+      });
+      host.innerHTML = svg;
+      host.setAttribute('aria-label', `QR code linking to ${window.location.origin}`);
+      qrRendered = true;
+    } catch {
+      host.textContent = 'QR code unavailable. Open this address on your phone:';
+      const address = document.createElement('span');
+      address.className = 'qr-error-url';
+      address.textContent = window.location.origin;
+      host.append(address);
+    }
+  }
+
+  function configureDownloadModal() {
+    const dialog = $('downloadDialog');
+    const trigger = $('openDownload');
+    const displayMode = window.matchMedia?.('(display-mode: standalone)');
+    const isElectron = /\belectron\//i.test(navigator.userAgent);
+    const updateTriggerVisibility = () => {
+      trigger.hidden = Boolean(isElectron || displayMode?.matches || navigator.standalone === true);
+    };
+    updateTriggerVisibility();
+    if (displayMode?.addEventListener) displayMode.addEventListener('change', updateTriggerVisibility);
+    else displayMode?.addListener?.(updateTriggerVisibility);
+
+    const platform = String(navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+    const recommended = platform.includes('mac') ? 'mac' : platform.includes('win') ? 'windows' : '';
+    if (recommended) {
+      const option = $(`install${recommended === 'mac' ? 'Mac' : 'Windows'}`);
+      $('desktopOptions').prepend(option);
+      option.querySelector('.platform-recommended').hidden = false;
+      option.classList.add('is-recommended');
+    }
+
+    const installerUrls = {
+      windows: safeInstallerUrl(import.meta.env.VITE_WINDOWS_INSTALLER_URL),
+      mac: safeInstallerUrl(import.meta.env.VITE_MAC_INSTALLER_URL)
+    };
+    const setInstallerLink = (id, url) => {
+      const link = $(id);
+      if (!url) return;
+      link.href = url;
+      link.hidden = false;
+    };
+    setInstallerLink('windowsInstallerLink', installerUrls.windows);
+    setInstallerLink('macInstallerLink', installerUrls.mac);
+    $('installerLinks').hidden = !installerUrls.windows && !installerUrls.mac;
+
+    trigger.addEventListener('click', async () => {
+      if (!dialog.open) dialog.showModal();
+      $('desktopInstallHelp').textContent = window.deferredInstallPrompt
+        ? 'Your browser can install Perloy directly.'
+        : installerUrls.windows || installerUrls.mac
+          ? 'Choose your system to install in the browser, or use a direct installer below.'
+          : 'No installer file is configured. Choose a system for browser installation steps.';
+      await renderDownloadQr();
+      $('closeDownload').focus();
+    });
+    $('closeDownload').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+    });
+
+    const installDesktop = async target => {
+      const promptEvent = window.deferredInstallPrompt;
+      if (promptEvent) {
+        try {
+          window.deferredInstallPrompt = null;
+          await promptEvent.prompt();
+          const choice = await promptEvent.userChoice;
+          $('desktopInstallHelp').textContent = choice.outcome === 'accepted'
+            ? 'Perloy is installing. You can close this window.'
+            : 'Install was dismissed. Use your browser menu to install Perloy later.';
+        } catch {
+          $('desktopInstallHelp').textContent = 'Install prompt unavailable. Use your browser menu or the installer link below.';
+        }
+        return;
+      }
+      if (installerUrls[target]) {
+        window.location.assign(installerUrls[target]);
+        return;
+      }
+      $('desktopInstallHelp').textContent = target === 'windows'
+        ? 'In Edge or Chrome, select the install icon in the address bar, or choose “Install Perloy” from the browser menu.'
+        : 'In Safari, choose File → Add to Dock. In Chrome or Edge, use the install icon or browser menu.';
+    };
+    $('installWindows').addEventListener('click', () => installDesktop('windows'));
+    $('installMac').addEventListener('click', () => installDesktop('mac'));
+  }
+
   function closeDialogs() {
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   }
@@ -701,6 +828,7 @@
     renderSchema();
     setDateDefaults();
     renderAll();
+    configureDownloadModal();
     if (stateNotice) setNotice(stateNotice, stateNotice.startsWith('Saved data could not'));
 
     document.querySelectorAll('.nav-link').forEach(button => button.addEventListener('click', () => navigate(button.dataset.view)));

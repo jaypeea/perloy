@@ -2,9 +2,16 @@
 <html lang="en-PH">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f6f9fc">
   <meta name="description" content="Perloy inventory, sales, and supplier receipts.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Perloy">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <title>Perloy | Inventory</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,6 +26,10 @@
       <span class="brand-name" translate="no">Perloy<span>STOCKROOM</span></span>
     </a>
     <div class="top-actions">
+      <button class="button button-primary download-trigger" id="openDownload" type="button">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20"><path d="M10 2.5v9m0 0 3.25-3.25M10 11.5 6.75 8.25M3.5 12.5v3.75h13V12.5"/></svg>
+        <span>Download App</span>
+      </button>
       <button class="button button-quiet" id="openSchema" type="button">Data dictionary</button>
       <button class="button button-quiet" id="exportData" type="button">Export data</button>
     </div>
@@ -174,7 +185,7 @@
     </section>
 
     <p id="appNotice" class="app-notice" role="status" aria-live="polite" hidden></p>
-    <footer class="page-footer"><span>Perloy inventory</span><span>Saved in this browser · PHP</span></footer>
+  <footer class="page-footer"><span>Perloy inventory</span><span>Saved locally · PHP</span></footer>
   </main>
 
   <dialog id="productDialog" class="dialog" aria-labelledby="productDialogTitle">
@@ -213,6 +224,64 @@
     <div id="schemaContent" class="schema-content"></div>
     <div class="schema-note"><strong>Field handling:</strong> Product SKUs use the <code translate="no">SKU-</code> prefix and a unique number you enter. The internal product ID remains fixed to preserve sales and stock links. Sales and supply receipts save their exact recorded time. Customer names are saved on each sale. Supplier contact numbers are stored as text so leading zeroes are preserved.</div>
     <div class="dialog-actions"><button class="button button-primary" type="button" data-close-dialog>Done</button></div>
+  </dialog>
+
+  <dialog id="downloadDialog" class="dialog dialog-download" aria-labelledby="downloadTitle" aria-describedby="downloadDescription">
+    <div class="download-modal">
+      <div class="download-modal-heading">
+        <div>
+          <p class="eyebrow">INSTALL PERLOY</p>
+          <h2 id="downloadTitle">Take Perloy with you</h2>
+          <p id="downloadDescription" class="dialog-copy">Install the stockroom on your phone or computer.</p>
+        </div>
+        <button class="icon-button" id="closeDownload" type="button" aria-label="Close download options">×</button>
+      </div>
+
+      <div class="download-grid">
+        <section class="download-mobile" aria-labelledby="mobileInstallTitle">
+          <div class="download-section-heading">
+            <span class="eyebrow">PHONE &amp; TABLET</span>
+            <h3 id="mobileInstallTitle">Scan to install</h3>
+          </div>
+          <div class="download-qr" id="downloadQr" role="img" aria-label="QR code for the Perloy website">
+            <span class="qr-loading" id="qrLoading">Preparing QR code…</span>
+          </div>
+          <p class="download-helper">Scan with your phone camera to open and install on Android or iOS.</p>
+          <div class="install-instructions" aria-label="Phone installation instructions">
+            <p><strong>Android</strong><span>Tap “Install App” when prompted, or choose Install app in your browser menu.</span></p>
+            <p><strong>iOS · Safari</strong><span>Tap Share, then “Add to Home Screen”.</span></p>
+          </div>
+        </section>
+
+        <section class="download-desktop" aria-labelledby="desktopInstallTitle">
+          <div class="download-section-heading">
+            <span class="eyebrow">WINDOWS &amp; MACOS</span>
+            <h3 id="desktopInstallTitle">Install on your computer</h3>
+            <p class="download-helper">Choose your system. Your browser will offer the app install when supported.</p>
+          </div>
+          <div class="desktop-options" id="desktopOptions">
+            <button class="desktop-option" id="installWindows" type="button" data-platform="windows">
+              <span class="platform-mark" aria-hidden="true">W</span>
+              <span class="desktop-option-copy"><strong>Download for Windows</strong><small>Install from your browser or download an installer</small></span>
+              <span class="platform-recommended" hidden>Recommended</span>
+              <span class="option-arrow" aria-hidden="true">↗</span>
+            </button>
+            <button class="desktop-option" id="installMac" type="button" data-platform="mac">
+              <span class="platform-mark platform-mark-mac" aria-hidden="true">M</span>
+              <span class="desktop-option-copy"><strong>Download for macOS</strong><small>Install from your browser or download an installer</small></span>
+              <span class="platform-recommended" hidden>Recommended</span>
+              <span class="option-arrow" aria-hidden="true">↗</span>
+            </button>
+          </div>
+          <p class="download-status" id="desktopInstallHelp" role="status" aria-live="polite">If an installer file is available, you can download it here.</p>
+          <div class="installer-links" id="installerLinks" hidden>
+            <a id="windowsInstallerLink" class="installer-link" hidden>Download Windows installer (.exe)</a>
+            <a id="macInstallerLink" class="installer-link" hidden>Download macOS installer (.dmg)</a>
+          </div>
+          <p class="download-note">Keep using the same web address to access records saved in this browser.</p>
+        </section>
+      </div>
+    </div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

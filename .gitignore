@@ -3,5 +3,12 @@ node_modules/
 .env.local
 .vercel/
 dist/
+dist-electron/
+release/
 .next/
 vendor/
+android/.gradle/
+android/app/build/
+ios/App/Pods/
+ios/DerivedData/
+.DS_Store
