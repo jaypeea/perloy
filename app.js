@@ -77,7 +77,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   let stateNotice = '';
   let mobileInstallTarget = 'android';
   const CLOUD_STATE_TABLE = 'perloy_shared_state';
-  const CLOUD_STATE_ID = 'default';
+  const CLOUD_STATE_ID = 'global';
   let cloudReady = false;
   let cloudConnecting = false;
   let cloudGeneration = 0;
@@ -237,22 +237,12 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
 
   function setCloudStatus(label, message = '', isError = false) {
     const state = $('cloudSyncState');
-    if (state) state.textContent = label;
-    if (message) setCloudMessage(message, isError);
+    if (!state) return;
+    state.textContent = label;
+    state.title = message || 'Shared inventory status';
+    state.dataset.error = isError ? 'true' : 'false';
+    state.setAttribute('aria-label', message ? label + ': ' + message : label);
   }
-
-  function setCloudMessage(message, isError = false) {
-    const status = $('cloudSyncMessage');
-    if (!status) return;
-    status.textContent = message;
-    status.classList.toggle('is-error', isError);
-  }
-
-  function updateCloudBackupButton() {
-    const button = $('downloadLocalBackup');
-    if (button) button.hidden = readCloudBackups().length === 0;
-  }
-
   function readCloudBackups() {
     try {
       const backups = JSON.parse(localStorage.getItem(CLOUD_BACKUP_KEY) || '[]');
@@ -267,7 +257,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
       const backups = readCloudBackups();
       backups.push({ savedAt: new Date().toISOString(), payload: copy(data) });
       localStorage.setItem(CLOUD_BACKUP_KEY, JSON.stringify(backups.slice(-3)));
-      updateCloudBackupButton();
       return true;
     } catch {
       setCloudStatus('Backup needed', 'Perloy could not preserve this device’s local records, so it did not replace them. Export this data and retry.', true);
@@ -309,10 +298,9 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
       }, change => {
         if (generation !== cloudGeneration || !change.new?.payload) return;
         try {
-          const changed = applyCloudPayload(change.new.payload, !cloudReady);
+          applyCloudPayload(change.new.payload, !cloudReady);
           cloudReady = true;
           setCloudStatus('Live', 'The shared inventory is updating across Perloy apps.');
-          if (changed) notify('Inventory updated from another Perloy app.');
         } catch (error) {
           setCloudStatus('Sync error', error.message, true);
         }
@@ -335,10 +323,9 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     try {
       const row = await fetchCloudState();
       if (generation !== cloudGeneration || !row?.payload) return;
-      const changed = applyCloudPayload(row.payload, !cloudReady);
+      applyCloudPayload(row.payload, !cloudReady);
       cloudReady = true;
       setCloudStatus('Live', 'Shared inventory is up to date.');
-      if (changed) notify('Inventory updated from another Perloy app.');
     } catch (error) {
       setCloudStatus('Sync error', error.message || 'Could not refresh the shared inventory.', true);
     }
@@ -394,28 +381,12 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   }
 
   function initializeCloudSync() {
-    $('cloudSetupHint').hidden = cloudConfigured;
-    updateCloudBackupButton();
     if (!cloudConfigured || !supabase) {
       setCloudStatus('Setup needed', 'Add the Supabase project URL and publishable key to connect this app.');
       return;
     }
     void connectCloudState();
   }
-
-  function downloadLocalCloudBackup() {
-    const backups = readCloudBackups();
-    if (!backups.length) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify({ backups }, null, 2)], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'Perloy-local-before-cloud.json';
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   function setNotice(message, isError = false) {
     const notice = $('appNotice');
     notice.textContent = message;
@@ -1069,6 +1040,8 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
       currency: 'PHP',
       tables: Object.fromEntries(Object.keys(SCHEMA).map(table => [table, data[table]]))
     };
+    const savedCopies = readCloudBackups();
+    if (savedCopies.length) payload.savedLocalCopies = savedCopies;
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1134,13 +1107,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     $('supplierForm').addEventListener('submit', saveSupplier);
     $('saleForm').addEventListener('submit', recordSale);
     $('supplyForm').addEventListener('submit', recordSupply);
-    $('openCloudSync').addEventListener('click', () => {
-      $('cloudSyncDialog').showModal();
-      closeCloudSync.focus();
-    });
-    $('closeCloudSync').addEventListener('click', () => $('cloudSyncDialog').close());
-    $('cloudSyncDialog').addEventListener('click', event => { if (event.target === $('cloudSyncDialog')) $('cloudSyncDialog').close(); });
-    $('downloadLocalBackup').addEventListener('click', downloadLocalCloudBackup);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && cloudReady) refreshCloudState();
     });

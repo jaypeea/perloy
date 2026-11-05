@@ -1,20 +1,20 @@
 # Perloy shared inventory sync
 
-Perloy web, Android, iOS, Windows, and macOS clients use the same Supabase row. No account or sign-in is required. The browser and installed apps keep local copies for offline use; the web client seeds the shared row when it does not exist, and native clients wait for that initial web copy.
+Perloy web, Android, iOS, Windows, and macOS clients use one Supabase row automatically. No account, sign-in, or manual sync action is required. The web client seeds the shared row when it does not exist; native apps wait for the web copy rather than seeding an empty database.
 
 ## Important access model
 
-The app uses a Supabase publishable key in client builds. The shared row has anonymous read, insert, and update policies, so anyone with the deployed app or project URL can read and change the inventory. This includes sales and customer or supplier details. Do not store data here that must remain private. There is no per-user isolation or access control.
+The app includes a Supabase publishable key. The shared row has anonymous read, insert, and update policies, so anyone with the deployed app or project URL can read and change all inventory data, including sales and customer or supplier details. This is a public shared database with no per-user access control. Do not store data here that must remain private.
 
 ## Database migration
 
-For the existing Perloy Supabase project, run supabase/migrations/202611060001_perloy_shared_state.sql in the SQL Editor. It creates public.perloy_shared_state with the fixed default row key, copies the most recently updated payload from the old public.perloy_state table when one exists, enables anonymous access and Realtime, and leaves the old table intact as a recovery copy.
+For the existing Supabase project, run supabase/migrations/202611060002_perloy_global_row.sql in the SQL Editor. It migrates the existing shared row from id=default to id=global, or copies the latest valid payload from the old per-user table if the shared row has not been created yet. It preserves the old per-user table as a recovery copy, configures anonymous read/write access, and enables Realtime.
 
-If the old per-user table had no rows, the first web app that connects seeds the shared row from its current browser data. Native apps do not seed an empty database, so a blank native install cannot overwrite the web inventory.
+If there is no existing cloud payload, the first web client seeds the row from its current browser data. Other web and native clients load that row automatically. Any device-local records replaced by the shared row remain in a local backup included with Export data.
 
 ## App configuration
 
-Set these values for the web deployment, native builds, and local development:
+Set these values for web deployments, native builds, and local development:
 
 - VITE_SUPABASE_URL: the project URL, such as https://your-project.supabase.co
 - VITE_SUPABASE_ANON_KEY: the Supabase publishable key (sb_publishable_…) or legacy anon key
@@ -23,4 +23,4 @@ For local development, put them in .env.local. In Vercel, set them for Productio
 
 ## Sync behavior
 
-Edits save to local storage first and upsert the shared JSON payload. Supabase Realtime pushes row updates to other running clients, and a client refreshes the row when it returns to the foreground. The newest write replaces the row payload, so simultaneous edits can overwrite one another. Local copies replaced by an existing shared row are saved as downloadable backups from Cloud sync.
+Changes save to local storage first and then upsert the global JSON payload. Supabase Realtime pushes updates to running clients, and a client refreshes the row when it returns to the foreground. Simultaneous edits use last-write-wins behavior; a later whole-state update can replace another device's earlier update.
