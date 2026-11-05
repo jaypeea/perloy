@@ -10,6 +10,10 @@ on:
         required: true
         type: string
 
+env:
+  VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+
 permissions:
   contents: write
 

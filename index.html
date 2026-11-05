@@ -41,6 +41,9 @@
         <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20"><path d="M10 2.5v9m0 0 3.25-3.25M10 11.5 6.75 8.25M3.5 12.5v3.75h13V12.5"/></svg>
         <span>Download App</span>
       </button>
+      <button class="button button-quiet cloud-sync-trigger" id="openCloudSync" type="button" aria-haspopup="dialog">
+        <span>Cloud sync</span><span class="cloud-sync-state" id="cloudSyncState" aria-live="polite">Setup needed</span>
+      </button>
       <button class="button button-quiet" id="openSchema" type="button">Data dictionary</button>
       <button class="button button-quiet" id="exportData" type="button">Export data</button>
     </div>
@@ -235,6 +238,38 @@
     <div id="schemaContent" class="schema-content"></div>
     <div class="schema-note"><strong>Field handling:</strong> Product SKUs use the <code translate="no">SKU-</code> prefix and a unique number you enter. The internal product ID remains fixed to preserve sales and stock links. Sales and supply receipts save their exact recorded time. Customer names are saved on each sale. Supplier contact numbers are stored as text so leading zeroes are preserved.</div>
     <div class="dialog-actions"><button class="button button-primary" type="button" data-close-dialog>Done</button></div>
+  </dialog>
+
+  <dialog id="cloudSyncDialog" class="dialog cloud-sync-dialog" aria-labelledby="cloudSyncTitle">
+    <form id="cloudSyncForm" novalidate>
+      <div class="dialog-heading">
+        <div><p class="eyebrow">SHARED INVENTORY</p><h2 id="cloudSyncTitle">Cloud sync</h2><p class="dialog-copy">Sign in with the same account on the web and every installed app.</p></div>
+        <button class="icon-button" id="closeCloudSync" type="button" aria-label="Close cloud sync">×</button>
+      </div>
+      <p class="cloud-sync-message" id="cloudSyncMessage" role="status" aria-live="polite"></p>
+      <div class="cloud-setup-hint" id="cloudSetupHint" hidden>
+        <strong>Connect a Supabase project</strong>
+        <p>Set <code translate="no">VITE_SUPABASE_URL</code> and <code translate="no">VITE_SUPABASE_ANON_KEY</code> in <code translate="no">.env.local</code> and Vercel, then rebuild the installed apps.</p>
+        <p>Run the SQL in <code translate="no">supabase/migrations/202611050001_perloy_state.sql</code> in the Supabase SQL Editor.</p>
+      </div>
+      <div id="cloudSignedOut">
+        <div class="cloud-auth-fields">
+          <label for="cloudEmail">Account email</label>
+          <input id="cloudEmail" type="email" autocomplete="email" required>
+          <label for="cloudPassword">Password</label>
+          <input id="cloudPassword" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="cloud-auth-actions">
+          <button class="button button-primary" id="signInCloud" type="submit">Sign in</button>
+          <button class="button button-quiet" id="createCloudAccount" type="button">Create account</button>
+        </div>
+      </div>
+      <section id="cloudSignedIn" class="cloud-signed-in" hidden>
+        <p>Signed in as <strong id="cloudAccountEmail"></strong></p>
+        <button class="button button-quiet" id="downloadLocalBackup" type="button" hidden>Download saved local copy</button>
+        <button class="button button-quiet" id="signOutCloud" type="button">Sign out</button>
+      </section>
+    </form>
   </dialog>
 
   <dialog id="downloadDialog" class="dialog dialog-download" aria-labelledby="downloadTitle" aria-describedby="downloadDescription">

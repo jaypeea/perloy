@@ -1,10 +1,12 @@
 import QRCode from 'qrcode';
 import { detectPlatform } from './platform.js';
+import { cloudConfigured, supabase } from './cloud-sync.js';
 
 (() => {
   'use strict';
 
   const STORAGE_KEY = 'perloy_dictionary_state_v1';
+  const CLOUD_BACKUP_KEY = 'perloy_local_before_cloud_v1';
   const OLD_KEYS = ['smartstock_inventory_state_v2', 'smartstock_step1_state_v1'];
   const LEGACY_USD_TO_PHP = 63.049;
   const money = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -74,6 +76,12 @@ import { detectPlatform } from './platform.js';
   let toastTimer;
   let stateNotice = '';
   let mobileInstallTarget = 'android';
+  let cloudUserId = '';
+  let cloudReady = false;
+  let cloudConnecting = false;
+  let cloudGeneration = 0;
+  let cloudChannel = null;
+  let cloudWriteQueue = Promise.resolve();
   window.addEventListener('pwa-install-ready', () => {
     const status = $('primaryInstallStatus');
     if (status && !status.textContent) status.textContent = 'Perloy can be installed on this device.';
@@ -226,6 +234,211 @@ import { detectPlatform } from './platform.js';
     }
   }
 
+  function setCloudStatus(label, message = '', isError = false) {
+    const state = $('cloudSyncState');
+    if (state) state.textContent = label;
+    if (message) setCloudMessage(message, isError);
+  }
+
+  function setCloudMessage(message, isError = false) {
+    const status = $('cloudSyncMessage');
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle('is-error', isError);
+  }
+
+  function updateCloudAccount(user = null) {
+    $('cloudSetupHint').hidden = cloudConfigured;
+
+    $('cloudSignedOut').hidden = !cloudConfigured || Boolean(user);
+    $('cloudSignedIn').hidden = !user;
+    if (user) $('cloudAccountEmail').textContent = user.email || 'Perloy account';
+    $('downloadLocalBackup').hidden = readCloudBackups().length === 0;
+  }
+
+  function readCloudBackups() {
+    try {
+      const backups = JSON.parse(localStorage.getItem(CLOUD_BACKUP_KEY) || '[]');
+      return Array.isArray(backups) ? backups : [];
+    } catch { return []; }
+  }
+
+  function preserveLocalBeforeCloud(remoteData) {
+    const localData = normalizeDictionary(data);
+    if (!Object.keys(SCHEMA).some(table => localData[table].length) || JSON.stringify(localData) === JSON.stringify(remoteData)) return true;
+    try {
+      const backups = readCloudBackups();
+      backups.push({ savedAt: new Date().toISOString(), payload: copy(data) });
+      localStorage.setItem(CLOUD_BACKUP_KEY, JSON.stringify(backups.slice(-3)));
+      updateCloudAccount(cloudUserId ? { email: $('cloudAccountEmail').textContent } : null);
+      return true;
+    } catch {
+      setCloudStatus('Backup needed', 'Perloy could not preserve this device’s local records, so it did not replace them. Export this data and retry.', true);
+      return false;
+    }
+  }
+
+  function applyCloudPayload(payload, preserveLocal = false) {
+    if (!validDictionary(payload)) throw new Error('The cloud record does not match Perloy’s data structure.');
+    const remoteData = normalizeDictionary(payload);
+    if (JSON.stringify(normalizeDictionary(data)) === JSON.stringify(remoteData)) return false;
+    if (preserveLocal && !preserveLocalBeforeCloud(remoteData)) throw new Error('Could not preserve this device’s local records, so the cloud copy was not applied.');
+    data = remoteData;
+    normalizeProductSkus();
+    saveData();
+    renderAll();
+    return true;
+  }
+
+  function isNativeShell() {
+    return ['native', 'desktop'].includes(import.meta.env.MODE) ||
+      window.location.protocol === 'file:' ||
+      window.location.protocol === 'capacitor:' ||
+      /Electron/i.test(navigator.userAgent);
+  }
+
+  async function fetchCloudState(userId) {
+    const { data: row, error } = await supabase.from('perloy_state').select('payload').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    return row;
+  }
+
+  function startCloudRealtime(userId, generation) {
+    if (cloudChannel) void supabase.removeChannel(cloudChannel);
+    cloudChannel = supabase.channel('perloy-state-' + userId)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'perloy_state', filter: 'user_id=eq.' + userId
+      }, change => {
+        if (generation !== cloudGeneration || !change.new?.payload) return;
+        try {
+          const changed = applyCloudPayload(change.new.payload, !cloudReady);
+          cloudReady = true;
+          setCloudStatus('Live', 'Shared records are updating across your signed-in Perloy apps.');
+          if (changed) notify('Inventory updated from your other Perloy app.');
+        } catch (error) {
+          setCloudStatus('Sync error', error.message, true);
+        }
+      })
+      .subscribe(status => {
+        if (generation !== cloudGeneration) return;
+        if (status === 'SUBSCRIBED') {
+          setCloudStatus(cloudReady ? 'Live' : 'Waiting', cloudReady ? 'Live sync is connected.' : 'Waiting for the web version to create the shared copy.');
+          refreshCloudState(userId, generation);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setCloudStatus('Reconnecting', 'Live updates are reconnecting. Changes will sync when the connection returns.', true);
+        }
+      });
+  }
+
+  async function refreshCloudState(userId, generation = cloudGeneration) {
+    if (!supabase || userId !== cloudUserId) return;
+    try {
+      const row = await fetchCloudState(userId);
+      if (generation !== cloudGeneration || !row?.payload) return;
+      const changed = applyCloudPayload(row.payload, !cloudReady);
+      cloudReady = true;
+      setCloudStatus('Live', 'Shared records are up to date.');
+      if (changed) notify('Inventory updated from your other Perloy app.');
+    } catch (error) {
+      setCloudStatus('Sync error', error.message || 'Could not refresh shared records.', true);
+    }
+  }
+
+  async function connectCloudUser(user) {
+    if (!cloudConfigured || !supabase || (cloudUserId === user.id && (cloudReady || cloudConnecting))) return;
+    cloudUserId = user.id;
+    cloudReady = false;
+    cloudConnecting = true;
+    const generation = ++cloudGeneration;
+    updateCloudAccount(user);
+    setCloudStatus('Connecting', 'Checking the shared Perloy account…');
+
+    try {
+      let row = await fetchCloudState(user.id);
+      if (generation !== cloudGeneration) return;
+      if (!row && !isNativeShell()) {
+        const { data: created, error } = await supabase.from('perloy_state')
+          .insert({ user_id: user.id, payload: copy(data) }).select('payload').single();
+        if (error?.code === '23505') row = await fetchCloudState(user.id);
+        else if (error) throw error;
+        else row = created;
+      }
+
+      if (row?.payload) {
+        const changed = applyCloudPayload(row.payload, true);
+        cloudReady = true;
+        setCloudStatus('Live', changed
+          ? 'The shared cloud copy is now active. Any different local records were saved in a backup.'
+          : 'This account is connected and ready to sync.');
+      } else {
+        setCloudStatus('Waiting', 'No shared records exist yet. Open the web version and sign in there first to copy its current inventory.');
+      }
+      startCloudRealtime(user.id, generation);
+    } catch (error) {
+      setCloudStatus('Sync error', error.message || 'Could not connect to the shared account. Check the Supabase setup.', true);
+    } finally {
+      if (generation === cloudGeneration) cloudConnecting = false;
+    }
+  }
+
+  function disconnectCloudUser() {
+    cloudGeneration += 1;
+    cloudUserId = '';
+    cloudReady = false;
+    cloudConnecting = false;
+    if (cloudChannel && supabase) void supabase.removeChannel(cloudChannel);
+    cloudChannel = null;
+  }
+
+  function queueCloudSave() {
+    if (!supabase || !cloudReady || !cloudUserId) return;
+    const userId = cloudUserId;
+    const payload = copy(data);
+    cloudWriteQueue = cloudWriteQueue.catch(() => {}).then(async () => {
+      if (!cloudReady || userId !== cloudUserId) return;
+      setCloudStatus('Saving', 'Saving changes to the shared Perloy account…');
+      const { error } = await supabase.from('perloy_state').upsert({
+        user_id: userId, payload, updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+      if (error) setCloudStatus('Sync error', error.message || 'Cloud save failed. Your local copy is still saved.', true);
+      else setCloudStatus('Live', 'Changes are synced across your Perloy apps.');
+    }).catch(error => setCloudStatus('Sync error', error.message || 'Cloud save failed. Your local copy is still saved.', true));
+  }
+
+  function initializeCloudSync() {
+    updateCloudAccount(null);
+    if (!cloudConfigured || !supabase) {
+      setCloudStatus('Setup needed', 'Add the Supabase project URL and public anon key to connect this app.');
+      return;
+    }
+
+    supabase.auth.onAuthStateChange((event, session) => {
+      window.setTimeout(() => {
+        if (session?.user) {
+          updateCloudAccount(session.user);
+          if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') connectCloudUser(session.user);
+        } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+          disconnectCloudUser();
+          updateCloudAccount(null);
+          setCloudStatus('Sign in', 'Sign in with the same Perloy account on each device to share its records.');
+        }
+      }, 0);
+    });
+  }
+
+  function downloadLocalCloudBackup() {
+    const backups = readCloudBackups();
+    if (!backups.length) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ backups }, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Perloy-local-before-cloud.json';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function setNotice(message, isError = false) {
     const notice = $('appNotice');
     notice.textContent = message;
@@ -244,7 +457,10 @@ import { detectPlatform } from './platform.js';
   function commit(message) {
     const saved = saveData();
     renderAll();
-    if (saved) notify(message);
+    if (saved) {
+      notify(message);
+      queueCloudSave();
+    }
   }
 
   function nextIntId(table, field) {
@@ -906,6 +1122,44 @@ import { detectPlatform } from './platform.js';
     if (action === 'delete-supplier') deleteSupplier(button.dataset.id);
   }
 
+  function cloudSignedOutHidden() {
+    return $('cloudSignedOut').hidden;
+  }
+
+  async function signInToCloud(event) {
+    event.preventDefault();
+    if (!supabase || !cloudConfigured) return;
+    const button = $('signInCloud');
+    button.disabled = true;
+    setCloudMessage('Signing in…');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: $('cloudEmail').value.trim(), password: $('cloudPassword').value
+    });
+    button.disabled = false;
+    if (error) setCloudMessage(error.message, true);
+    else setCloudMessage('Signed in. Connecting shared records…');
+  }
+
+  async function createCloudAccount() {
+    if (!supabase || !cloudConfigured) return;
+    const button = $('createCloudAccount');
+    button.disabled = true;
+    setCloudMessage('Creating account…');
+    const { data: result, error } = await supabase.auth.signUp({
+      email: $('cloudEmail').value.trim(), password: $('cloudPassword').value
+    });
+    button.disabled = false;
+    if (error) setCloudMessage(error.message, true);
+    else if (result.session) setCloudMessage('Account created. Connecting shared records…');
+    else setCloudMessage('Check your email to confirm the account, then sign in here and on each app.');
+  }
+
+  async function signOutFromCloud() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) setCloudMessage(error.message, true);
+  }
+
   function initializeSchema() {
     loadData();
     renderSchema();
@@ -941,6 +1195,21 @@ import { detectPlatform } from './platform.js';
     $('supplierForm').addEventListener('submit', saveSupplier);
     $('saleForm').addEventListener('submit', recordSale);
     $('supplyForm').addEventListener('submit', recordSupply);
+    $('openCloudSync').addEventListener('click', () => {
+      $('cloudSyncDialog').showModal();
+      if (!cloudSignedOutHidden()) $('cloudEmail').focus();
+      else $('closeCloudSync').focus();
+    });
+    $('closeCloudSync').addEventListener('click', () => $('cloudSyncDialog').close());
+    $('cloudSyncDialog').addEventListener('click', event => { if (event.target === $('cloudSyncDialog')) $('cloudSyncDialog').close(); });
+    $('cloudAuthForm').addEventListener('submit', signInToCloud);
+    $('createCloudAccount').addEventListener('click', createCloudAccount);
+    $('signOutCloud').addEventListener('click', signOutFromCloud);
+    $('downloadLocalBackup').addEventListener('click', downloadLocalCloudBackup);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && cloudReady && cloudUserId) refreshCloudState(cloudUserId);
+    });
+    initializeCloudSync();
     $('saleProduct').addEventListener('change', updateSaleTotal);
     $('saleQty').addEventListener('input', updateSaleTotal);
     $('deleteProduct').addEventListener('click', () => deleteProduct($('productId').value));
