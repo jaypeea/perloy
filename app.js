@@ -14,6 +14,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   const integer = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 });
   const dateLabel = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' });
   const timeLabel = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  const arrivalLabel = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
   const $ = id => document.getElementById(id);
   const copy = value => JSON.parse(JSON.stringify(value));
   const text = value => String(value ?? '').trim();
@@ -44,6 +45,10 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
       ['CustomerName', 'Varchar', '100', 'Name entered when the sale is recorded'],
       ['Date', 'Date', 'Not listed', 'Date of the transaction'],
       ['RecordedAt', 'DateTime', 'Not listed', 'Timestamp when the sale was saved; displayed in local time'],
+      ['DeliveryZone', 'Varchar', '80', 'Delivery area or zone'],
+      ['DistanceKm', 'Double', 'Not listed', 'Delivery distance used to estimate truck arrival'],
+      ['DispatchTime', 'DateTime', 'Not listed', 'Planned local dispatch time stored as an ISO timestamp'],
+      ['EstimatedArrival', 'DateTime', 'Not listed', 'Calculated arrival: dispatch + 20 minute loading buffer + distance at 25 km/h'],
       ['ProductID', 'Int', '5', 'ID of the product'],
       ['Qty', 'Int', 'Not listed', 'Quantity sold'],
       ['TotalPrice', 'Double', 'Not listed', 'Total price, in PHP']
@@ -412,6 +417,35 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
   }
   function countLabel(count, noun) { return `${integer.format(count)} ${noun}${count === 1 ? '' : 's'}`; }
 
+  function deliveryEstimate(dispatchTime, distanceKm, now = Date.now()) {
+    const dispatch = new Date(dispatchTime).getTime();
+    const distance = Number(distanceKm);
+    if (!Number.isFinite(dispatch) || !Number.isFinite(distance) || distance <= 0) return null;
+    const loadingEnds = dispatch + 20 * 60_000;
+    const arrival = loadingEnds + (distance / 25) * 60 * 60_000;
+    const status = now < loadingEnds ? 'Preparing' : now < arrival - 15 * 60_000 ? 'In Transit' : now < arrival ? 'Arriving Soon' : 'Arrived';
+    return { arrival, status };
+  }
+
+  function deliveryMarkup(sale) {
+    const estimate = deliveryEstimate(sale.DispatchTime, sale.DistanceKm);
+    if (!estimate) return '<span class="secondary-cell">Pickup / no delivery ETA</span>';
+    const statusClass = estimate.status === 'Preparing' ? 'delivery-preparing' : estimate.status === 'Arrived' ? 'delivery-arrived' : 'delivery-moving';
+    return `<div class="delivery-cell"><span class="delivery-status ${statusClass}">${estimate.status}</span><span class="delivery-arrival">${escapeHtml(arrivalLabel.format(estimate.arrival))}</span><span class="secondary-cell">${escapeHtml(sale.DeliveryZone || 'Delivery')} · ${integer.format(Number(sale.DistanceKm))} km</span></div>`;
+  }
+
+  function updateDeliveryPreview() {
+    const preview = $('deliveryPreview');
+    const distanceValue = $('deliveryDistance').value;
+    const estimate = deliveryEstimate($('dispatchTime').value, distanceValue);
+    preview.hidden = !text($('deliveryZone').value) && !distanceValue && !$('dispatchTime').value;
+    if (!estimate) {
+      preview.textContent = 'Enter all delivery details to calculate arrival.';
+      return;
+    }
+    const statusClass = estimate.status === 'Preparing' ? 'delivery-preparing' : estimate.status === 'Arrived' ? 'delivery-arrived' : 'delivery-moving';
+    preview.innerHTML = `<span>Estimated arrival</span><strong>${escapeHtml(arrivalLabel.format(estimate.arrival))}</strong><span class="delivery-status ${statusClass}">${estimate.status}</span>`;
+  }
   function renderMetrics() {
     const units = data.tblStock.reduce((total, stock) => total + (Number(stock.StockQty) || 0), 0);
     const outOfStock = data.tblProduct.filter(product => (productStock(product.ProductID)?.StockQty ?? 0) <= 0).length;
@@ -494,6 +528,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
         <td>${escapeHtml(product?.ProductName || 'Deleted product')}</td>
         <td class="numeric">${integer.format(sale.Qty)}</td>
         <td class="numeric price-cell">${formatMoney(sale.TotalPrice)}</td>
+        <td>${deliveryMarkup(sale)}</td>
       </tr>`;
     }).join('');
   }
@@ -739,10 +774,20 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     if (!Number.isInteger(quantity) || quantity < 1) return showError('saleError', 'Quantity must be a whole number greater than zero.');
     if (quantity > stock.StockQty) return showError('saleError', `Only ${integer.format(stock.StockQty)} units are available. Reduce the quantity or record a supply first.`);
     if (!$('saleDate').value) return showError('saleError', 'Choose the sale date.');
+    const zone = text($('deliveryZone').value).slice(0, 80);
+    const distanceInput = $('deliveryDistance').value;
+    const dispatchInput = $('dispatchTime').value;
+    const hasDeliveryDetails = Boolean(zone || distanceInput || dispatchInput);
+    if (hasDeliveryDetails && (!zone || !distanceInput || !dispatchInput || !Number.isFinite(Number(distanceInput)) || Number(distanceInput) <= 0)) {
+      return showError('saleError', 'For delivery ETA, enter the zone, a distance above zero, and dispatch time. Leave all three blank for pickup.');
+    }
+    const dispatchTime = hasDeliveryDetails ? new Date(dispatchInput).toISOString() : '';
+    const estimate = hasDeliveryDetails ? deliveryEstimate(dispatchTime, Number(distanceInput)) : null;
     try {
       data.tblSales.push({
         TransacNo: nextIntId('tblSales', 'TransacNo'), CustomerName: customerName, Date: $('saleDate').value, RecordedAt: new Date().toISOString(),
-        ProductID: productId, Qty: quantity, TotalPrice: Math.round(product.ProductPrice * quantity * 100) / 100
+        ProductID: productId, Qty: quantity, TotalPrice: Math.round(product.ProductPrice * quantity * 100) / 100,
+        DeliveryZone: zone, DistanceKm: hasDeliveryDetails ? Number(distanceInput) : null, DispatchTime: dispatchTime, EstimatedArrival: estimate ? new Date(estimate.arrival).toISOString() : null
       });
     } catch (error) { return showError('saleError', error.message); }
     stock.StockQty -= quantity;
@@ -750,6 +795,10 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     $('saleProduct').value = '';
     $('saleQty').value = '1';
     $('saleDate').value = localDate();
+    $('deliveryZone').value = '';
+    $('deliveryDistance').value = '';
+    $('dispatchTime').value = '';
+    updateDeliveryPreview();
     commit('Sale recorded and stock updated.');
   }
 
@@ -877,6 +926,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     $('saleQty').addEventListener('input', updateSaleTotal);
     $('deleteProduct').addEventListener('click', () => deleteProduct($('productId').value));
     $('saleForm').addEventListener('input', () => { $('saleError').hidden = true; });
+    window.setInterval(() => { renderSales(); updateDeliveryPreview(); }, 60_000);
     $('supplyForm').addEventListener('input', () => { $('supplyError').hidden = true; });
   }
 

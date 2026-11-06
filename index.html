@@ -130,7 +130,14 @@
           <label for="saleDate">Date</label><input id="saleDate" name="Date" type="date" required>
           <label for="saleCustomer">Customer name</label><input id="saleCustomer" name="CustomerName" type="text" maxlength="100" autocomplete="name" placeholder="Enter the name on the sale" required>
           <label for="saleProduct">Product</label><select id="saleProduct" name="ProductID" required></select>
-          <label for="saleQty">Quantity</label><input id="saleQty" name="Qty" type="number" min="1" step="1" value="1" required>
+          <label for="saleQty">Quantity</label><input id="saleQty" name="Qty" type="number" min="1" step="1" value="1" required>          <fieldset class="delivery-fields">
+            <legend>Delivery details <span>(optional for pickup)</span></legend>
+            <label for="deliveryZone">Delivery zone</label><input id="deliveryZone" name="DeliveryZone" type="text" maxlength="80" autocomplete="off" placeholder="District or delivery area">
+            <label for="deliveryDistance">Distance (km)</label><input id="deliveryDistance" name="DistanceKm" type="number" min="0.1" step="0.1" inputmode="decimal" placeholder="e.g. 12.5">
+            <label for="dispatchTime">Dispatch time</label><input id="dispatchTime" name="DispatchTime" type="datetime-local">
+            <div class="delivery-preview" id="deliveryPreview" hidden aria-live="polite"></div>
+            <p class="field-hint">ETA includes 20 minutes for loading and an average truck speed of 25 km/h.</p>
+          </fieldset>
           <div class="form-total"><span>Sale total</span><strong id="saleTotal">₱0.00</strong></div>
           <p id="saleError" class="form-message" role="alert" hidden></p>
           <p id="saleRecovery" class="form-footnote" hidden>No products saved yet. <button class="inline-link" id="addProductFromSale" type="button">Add a product</button> before recording a sale.</p>
@@ -142,7 +149,7 @@
           <div class="table-frame table-frame-inner">
             <table>
               <caption class="sr-only">Sales by date and time, customer, product, quantity, and total price</caption>
-              <thead><tr><th scope="col">Date / time / no.</th><th scope="col">Customer</th><th scope="col">Product</th><th scope="col" class="numeric">Qty.</th><th scope="col" class="numeric">Total</th></tr></thead>
+              <thead><tr><th scope="col">Date / time / no.</th><th scope="col">Customer</th><th scope="col">Product</th><th scope="col" class="numeric">Qty.</th><th scope="col" class="numeric">Total</th><th scope="col">Delivery / arrival</th></tr></thead>
               <tbody id="salesRows"></tbody>
             </table>
             <div id="salesEmpty" class="empty-state" hidden><p class="empty-title">No sales recorded</p><p>Saved transactions will appear here.</p></div>
