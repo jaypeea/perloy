@@ -1,0 +1,29 @@
+name: Build Desktop Apps
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pnpm
+        run: npm install -g pnpm
+      - name: Install Pake CLI
+        run: pnpm install -g pake-cli
+      - name: Build Desktop App
+        run: pake https://your-perloy-site.vercel.app --name Perloy
+      - name: Upload Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: Perloy-${{ runner.os }}
+          path: |
+            *.exe
+            *.msi
+            *.dmg
