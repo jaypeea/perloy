@@ -1,20 +1,24 @@
 name: Build Desktop Apps
+
 on:
   workflow_dispatch:
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
- steps:
+    steps:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Build Desktop App
-        run: npx pake-cli https://smartstock-perloy.vercel.app/
+        run: npx --yes pake-cli https://smartstock-perloy.vercel.app/ --name Perloy
+
       - name: Upload Installers
         uses: actions/upload-artifact@v4
         with:
