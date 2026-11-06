@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import DownloadAppSection from './DownloadAppSection.jsx';
 import { cloudConfigured, supabase } from './cloud-sync.js';
 
 (() => {
@@ -213,16 +216,6 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
       setNotice('Changes are visible in this tab but could not be saved in browser storage. Export a copy before closing.', true);
       return false;
     }
-  }
-
-  function setupDesktopDownloads() {
-    const menu = $('desktopDownloads');
-    document.addEventListener('click', event => {
-      if (menu.open && !menu.contains(event.target)) menu.open = false;
-    });
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') menu.open = false;
-    });
   }
 
   function readCloudBackups() {
@@ -866,7 +859,7 @@ import { cloudConfigured, supabase } from './cloud-sync.js';
     $('addSupplierFromSupply').addEventListener('click', () => $('addSupplier').click());
     $('openSchema').addEventListener('click', () => openDialog('schemaDialog'));
     $('exportData').addEventListener('click', exportData);
-    setupDesktopDownloads();
+    createRoot($('downloadAppRoot')).render(createElement(DownloadAppSection));
     document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', closeDialogs));
     $('inventorySearch').addEventListener('input', renderInventory);
     $('stockFilter').addEventListener('change', renderInventory);
