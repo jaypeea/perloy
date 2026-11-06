@@ -8,17 +8,13 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    steps:
+ steps:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install pnpm
-        run: npm install -g pnpm
-      - name: Install Pake CLI
-        run: pnpm install -g pake-cli
       - name: Build Desktop App
-        run: pake https://your-perloy-site.vercel.app --name Perloy
+        run: npx pake-cli https://smartstock-perloy.vercel.app/
       - name: Upload Installers
         uses: actions/upload-artifact@v4
         with:
